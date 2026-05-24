@@ -7,13 +7,24 @@ import type {
   LightSettings,
   LightSettingsUpdate,
 } from './types.js'
+import { Effect } from 'effect'
+
 import {
   KeylightConnectionError,
   KeylightBadRequestError,
   KeylightValidationError,
 } from './errors.js'
-import type { HttpClient } from './http-client.js'
+import type { HttpClient, HttpResponse } from './http-client.js'
 import { FetchHttpClient } from './http-client.js'
+
+export type KeylightOperationError =
+  | KeylightConnectionError
+  | KeylightBadRequestError
+  | KeylightValidationError
+
+export interface KeylightOptions {
+  httpClient?: HttpClient
+}
 
 /**
  * Temperature conversion utilities
@@ -51,20 +62,8 @@ export class Temperature {
  *
  * @example
  * ```typescript
- * const keylight = new Keylight("192.168.1.61");
- *
- * // Turn on the light
- * await keylight.turnOn();
- *
- * // Set brightness to 50%
- * await keylight.setBrightness(50);
- *
- * // Set temperature to 4000K
- * await keylight.setTemperatureKelvin(4000);
- *
- * // Get current status
- * const status = await keylight.getLights();
- * console.log(status);
+ * const keylight = Keylight.make('192.168.1.61')
+ * await Effect.runPromise(keylight.setBrightness(50))
  * ```
  */
 export class Keylight {
@@ -82,287 +81,255 @@ export class Keylight {
   }
 
   /**
+   * Create a new Keylight client
+   * @param host IP address or hostname of the Keylight device
+   * @param options Optional client configuration
+   */
+  static make(host: string, options: KeylightOptions = {}): Keylight {
+    return new Keylight(host, options.httpClient)
+  }
+
+  /**
    * Flash the light to identify the device
    */
-  async identify(): Promise<void> {
-    try {
-      const response = await this.httpClient.post<void>(
-        `${this.baseUrl}/identify`
-      )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/identify')
-      }
-    } catch (error) {
-      if (error instanceof KeylightBadRequestError) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  identify(): Effect.Effect<void, KeylightOperationError> {
+    return this.request('POST', '/identify', () =>
+      this.httpClient.post<void>(`${this.baseUrl}/identify`)
+    ).pipe(Effect.asVoid)
   }
 
   /**
    * Get device accessory information
    */
-  async getAccessoryInfo(): Promise<AccessoryInfo> {
-    try {
-      const response = await this.httpClient.get<AccessoryInfo>(
-        `${this.baseUrl}/accessory-info`
-      )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/accessory-info')
-      }
-
-      return response.data
-    } catch (error) {
-      if (error instanceof KeylightBadRequestError) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  getAccessoryInfo(): Effect.Effect<AccessoryInfo, KeylightOperationError> {
+    return this.request('GET', '/accessory-info', () =>
+      this.httpClient.get<AccessoryInfo>(`${this.baseUrl}/accessory-info`)
+    )
   }
 
   /**
    * Update device accessory information
    * @param info Partial accessory info to update
    */
-  async updateAccessoryInfo(info: AccessoryInfoUpdate): Promise<AccessoryInfo> {
-    try {
-      const response = await this.httpClient.put<AccessoryInfo>(
-        `${this.baseUrl}/accessory-info`,
-        info
-      )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/accessory-info')
-      }
-
-      return response.data
-    } catch (error) {
-      if (error instanceof KeylightBadRequestError) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  updateAccessoryInfo(
+    info: AccessoryInfoUpdate
+  ): Effect.Effect<AccessoryInfo, KeylightOperationError> {
+    return this.request('PUT', '/accessory-info', () =>
+      this.httpClient.put<AccessoryInfo>(`${this.baseUrl}/accessory-info`, info)
+    )
   }
 
   /**
    * Get current lights status
    */
-  async getLights(): Promise<LightsStatus> {
-    try {
-      const response = await this.httpClient.get<LightsStatus>(
-        `${this.baseUrl}/lights`
-      )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/lights')
-      }
-
-      return response.data
-    } catch (error) {
-      if (error instanceof KeylightBadRequestError) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  getLights(): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.request('GET', '/lights', () =>
+      this.httpClient.get<LightsStatus>(`${this.baseUrl}/lights`)
+    )
   }
 
   /**
    * Update lights status
    * @param lights Lights update configuration
    */
-  async updateLights(lights: LightsUpdate): Promise<LightsStatus> {
-    // Validate brightness values
-    for (const light of lights.lights) {
-      if (light.brightness !== undefined) {
-        if (light.brightness < 0 || light.brightness > 100) {
-          throw new KeylightValidationError(
-            'brightness',
-            light.brightness,
-            0,
-            100
-          )
-        }
-      }
-      if (light.temperature !== undefined) {
-        if (light.temperature < 143 || light.temperature > 344) {
-          throw new KeylightValidationError(
-            'temperature',
-            light.temperature,
-            143,
-            344
-          )
-        }
-      }
-    }
-
-    try {
-      const response = await this.httpClient.put<LightsStatus>(
-        `${this.baseUrl}/lights`,
-        lights
+  updateLights(
+    lights: LightsUpdate
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.validateLights(lights).pipe(
+      Effect.flatMap(() =>
+        this.request('PUT', '/lights', () =>
+          this.httpClient.put<LightsStatus>(`${this.baseUrl}/lights`, lights)
+        )
       )
+    )
+  }
 
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/lights')
-      }
-
-      return response.data
-    } catch (error) {
-      if (
-        error instanceof KeylightBadRequestError ||
-        error instanceof KeylightValidationError
-      ) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  /**
+   * Alias for updating lights status.
+   * @param light Light update configuration
+   */
+  setLights(
+    light: LightUpdate
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.updateLights({
+      numberOfLights: 1,
+      lights: [light],
+    })
   }
 
   /**
    * Get light settings
    */
-  async getSettings(): Promise<LightSettings> {
-    try {
-      const response = await this.httpClient.get<LightSettings>(
-        `${this.baseUrl}/lights/settings`
-      )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/lights/settings')
-      }
-
-      return response.data
-    } catch (error) {
-      if (error instanceof KeylightBadRequestError) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+  getSettings(): Effect.Effect<LightSettings, KeylightOperationError> {
+    return this.request('GET', '/lights/settings', () =>
+      this.httpClient.get<LightSettings>(`${this.baseUrl}/lights/settings`)
+    )
   }
 
   /**
    * Update light settings
    * @param settings Partial settings to update
    */
-  async updateSettings(settings: LightSettingsUpdate): Promise<LightSettings> {
-    // Validate settings values
-    if (settings.powerOnBrightness !== undefined) {
-      if (settings.powerOnBrightness < 0 || settings.powerOnBrightness > 100) {
-        throw new KeylightValidationError(
-          'powerOnBrightness',
-          settings.powerOnBrightness,
-          0,
-          100
+  updateSettings(
+    settings: LightSettingsUpdate
+  ): Effect.Effect<LightSettings, KeylightOperationError> {
+    return this.validateSettings(settings).pipe(
+      Effect.flatMap(() =>
+        this.request('PUT', '/lights/settings', () =>
+          this.httpClient.put<LightSettings>(
+            `${this.baseUrl}/lights/settings`,
+            settings
+          )
         )
-      }
-    }
-    if (settings.powerOnTemperature !== undefined) {
-      if (
-        settings.powerOnTemperature < 143 ||
-        settings.powerOnTemperature > 344
-      ) {
-        throw new KeylightValidationError(
-          'powerOnTemperature',
-          settings.powerOnTemperature,
-          143,
-          344
-        )
-      }
-    }
-
-    try {
-      const response = await this.httpClient.put<LightSettings>(
-        `${this.baseUrl}/lights/settings`,
-        settings
       )
-
-      if (!response.ok) {
-        throw new KeylightBadRequestError('/lights/settings')
-      }
-
-      return response.data
-    } catch (error) {
-      if (
-        error instanceof KeylightBadRequestError ||
-        error instanceof KeylightValidationError
-      ) {
-        throw error
-      }
-      throw new KeylightConnectionError(this.baseUrl, error as Error)
-    }
+    )
   }
-
-  // Convenience methods for common operations
 
   /**
    * Turn on the light (preserves current brightness and temperature)
    */
-  async turnOn(): Promise<LightsStatus> {
-    return this.updateLights({
-      numberOfLights: 1,
-      lights: [{ on: 1 }],
-    })
+  turnOn(): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.setLights({ on: 1 })
   }
 
   /**
    * Turn off the light (preserves current brightness and temperature)
    */
-  async turnOff(): Promise<LightsStatus> {
-    return this.updateLights({
-      numberOfLights: 1,
-      lights: [{ on: 0 }],
-    })
+  turnOff(): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.setLights({ on: 0 })
   }
 
   /**
    * Set brightness percentage (0-100)
    * @param brightness Brightness percentage (0-100)
    */
-  async setBrightness(brightness: number): Promise<LightsStatus> {
-    if (brightness < 0 || brightness > 100) {
-      throw new KeylightValidationError('brightness', brightness, 0, 100)
-    }
-
-    return this.updateLights({
-      numberOfLights: 1,
-      lights: [{ brightness }],
-    })
+  setBrightness(
+    brightness: number
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.setLights({ brightness })
   }
 
   /**
    * Set temperature in Kelvin (2900-7000)
    * @param kelvin Temperature in Kelvin (2900-7000)
    */
-  async setTemperatureKelvin(kelvin: number): Promise<LightsStatus> {
-    const temperature = Temperature.kelvinToApi(kelvin)
-    return this.setTemperature(temperature)
+  setTemperatureKelvin(
+    kelvin: number
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return Effect.try({
+      try: () => Temperature.kelvinToApi(kelvin),
+      catch: (error: unknown) => error as KeylightValidationError,
+    }).pipe(
+      Effect.flatMap((temperature: number) => this.setTemperature(temperature))
+    )
   }
 
   /**
    * Set temperature in API format (143-344)
    * @param temperature Temperature in API format (143-344)
    */
-  async setTemperature(temperature: number): Promise<LightsStatus> {
-    if (temperature < 143 || temperature > 344) {
-      throw new KeylightValidationError('temperature', temperature, 143, 344)
-    }
-
-    return this.updateLights({
-      numberOfLights: 1,
-      lights: [{ temperature }],
-    })
+  setTemperature(
+    temperature: number
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.setLights({ temperature })
   }
 
   /**
    * Set multiple properties at once
    * @param options Light properties to set
    */
-  async setLight(options: LightUpdate): Promise<LightsStatus> {
-    return this.updateLights({
-      numberOfLights: 1,
-      lights: [options],
+  setLight(
+    options: LightUpdate
+  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+    return this.setLights(options)
+  }
+
+  private request<T>(
+    _method: string,
+    endpoint: string,
+    makeRequest: () => Effect.Effect<HttpResponse<T>, KeylightConnectionError>
+  ): Effect.Effect<T, KeylightConnectionError | KeylightBadRequestError> {
+    return Effect.gen(function* () {
+      const response = yield* makeRequest()
+
+      if (!response.ok) {
+        return yield* Effect.fail(new KeylightBadRequestError(endpoint))
+      }
+
+      return response.data
     })
+  }
+
+  private validateLights(
+    lights: LightsUpdate
+  ): Effect.Effect<void, KeylightValidationError> {
+    for (const light of lights.lights) {
+      if (light.brightness !== undefined) {
+        const result = this.validateRange(
+          'brightness',
+          light.brightness,
+          0,
+          100
+        )
+        if (result) {
+          return Effect.fail(result)
+        }
+      }
+
+      if (light.temperature !== undefined) {
+        const result = this.validateRange(
+          'temperature',
+          light.temperature,
+          143,
+          344
+        )
+        if (result) {
+          return Effect.fail(result)
+        }
+      }
+    }
+
+    return Effect.void
+  }
+
+  private validateSettings(
+    settings: LightSettingsUpdate
+  ): Effect.Effect<void, KeylightValidationError> {
+    if (settings.powerOnBrightness !== undefined) {
+      const result = this.validateRange(
+        'powerOnBrightness',
+        settings.powerOnBrightness,
+        0,
+        100
+      )
+      if (result) {
+        return Effect.fail(result)
+      }
+    }
+
+    if (settings.powerOnTemperature !== undefined) {
+      const result = this.validateRange(
+        'powerOnTemperature',
+        settings.powerOnTemperature,
+        143,
+        344
+      )
+      if (result) {
+        return Effect.fail(result)
+      }
+    }
+
+    return Effect.void
+  }
+
+  private validateRange(
+    field: string,
+    value: number,
+    min: number,
+    max: number
+  ): KeylightValidationError | undefined {
+    if (value < min || value > max) {
+      return new KeylightValidationError(field, value, min, max)
+    }
   }
 }

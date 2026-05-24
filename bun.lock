@@ -12,6 +12,9 @@
     },
     "packages/keylight": {
       "name": "@lumenu/keylight",
+      "dependencies": {
+        "effect": "catalog:",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
       },

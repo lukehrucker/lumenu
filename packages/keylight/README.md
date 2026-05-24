@@ -22,29 +22,30 @@ bun add @lumenu/keylight
 ### Basic Usage
 
 ```typescript
+import { Effect } from 'effect'
 import { Keylight } from '@lumenu/keylight'
 
 // Create a client (use your Key Light's IP address)
-const keylight = new Keylight('192.168.1.61')
+const keylight = Keylight.make('192.168.1.61')
 
 // Turn on the light
-await keylight.turnOn()
+await Effect.runPromise(keylight.turnOn())
 
 // Set brightness to 50%
-await keylight.setBrightness(50)
+await Effect.runPromise(keylight.setBrightness(50))
 
 // Set color temperature to 4000K
-await keylight.setTemperatureKelvin(4000)
+await Effect.runPromise(keylight.setTemperatureKelvin(4000))
 
 // Turn off
-await keylight.turnOff()
+await Effect.runPromise(keylight.turnOff())
 ```
 
 ### Advanced Usage
 
 ```typescript
 // Get current status
-const status = await keylight.getLights()
+const status = await Effect.runPromise(keylight.getLights())
 console.log(status)
 // {
 //   numberOfLights: 1,
@@ -52,30 +53,36 @@ console.log(status)
 // }
 
 // Update multiple properties at once
-await keylight.setLight({
-  on: 1,
-  brightness: 75,
-  temperature: 250,
-})
+await Effect.runPromise(
+  keylight.setLight({
+    on: 1,
+    brightness: 75,
+    temperature: 250,
+  })
+)
 
 // Get device information
-const info = await keylight.getAccessoryInfo()
+const info = await Effect.runPromise(keylight.getAccessoryInfo())
 console.log(info.displayName, info.firmwareVersion)
 
 // Update device name
-await keylight.updateAccessoryInfo({
-  displayName: 'My Studio Light',
-})
+await Effect.runPromise(
+  keylight.updateAccessoryInfo({
+    displayName: 'My Studio Light',
+  })
+)
 
 // Get and update settings
-const settings = await keylight.getSettings()
-await keylight.updateSettings({
-  powerOnBehavior: 1,
-  powerOnBrightness: 20,
-})
+const settings = await Effect.runPromise(keylight.getSettings())
+await Effect.runPromise(
+  keylight.updateSettings({
+    powerOnBehavior: 1,
+    powerOnBrightness: 20,
+  })
+)
 
 // Identify device (flashes the light)
-await keylight.identify()
+await Effect.runPromise(keylight.identify())
 ```
 
 ### Temperature Conversion
@@ -97,11 +104,12 @@ const kelvin = Temperature.apiToKelvin(240) // 4000
 ### Constructor
 
 ```typescript
+Keylight.make(host: string, options?: KeylightOptions)
 new Keylight(ip: string, httpClient?: HttpClient)
 ```
 
-- `ip` - IP address of your Key Light device
-- `httpClient` - Optional custom HTTP client (for testing)
+- `host` / `ip` - IP address or hostname of your Key Light device
+- `options.httpClient` / `httpClient` - Optional custom HTTP client (for testing)
 
 ### Methods
 
@@ -126,26 +134,25 @@ new Keylight(ip: string, httpClient?: HttpClient)
 
 ### Error Handling
 
-The client throws typed errors for better error handling:
+The client returns typed Effect errors for better error handling:
 
 ```typescript
+import { Effect } from 'effect'
 import {
   KeylightConnectionError,
   KeylightBadRequestError,
   KeylightValidationError,
 } from '@lumenu/keylight'
 
-try {
-  await keylight.setBrightness(150) // Invalid value
-} catch (error) {
-  if (error instanceof KeylightValidationError) {
-    console.error(`Validation error: ${error.message}`)
-    console.error(`Field: ${error.field}, Value: ${error.value}`)
-  } else if (error instanceof KeylightConnectionError) {
-    console.error(`Connection failed: ${error.message}`)
-  } else if (error instanceof KeylightBadRequestError) {
-    console.error(`Bad request to ${error.endpoint}`)
-  }
+const error = await Effect.runPromise(Effect.flip(keylight.setBrightness(150)))
+
+if (error instanceof KeylightValidationError) {
+  console.error(`Validation error: ${error.message}`)
+  console.error(`Field: ${error.field}, Value: ${error.value}`)
+} else if (error instanceof KeylightConnectionError) {
+  console.error(`Connection failed: ${error.message}`)
+} else if (error instanceof KeylightBadRequestError) {
+  console.error(`Bad request to ${error.endpoint}`)
 }
 ```
 
@@ -154,29 +161,32 @@ try {
 The client is designed for easy testing with dependency injection:
 
 ```typescript
+import { Effect } from 'effect'
 import { Keylight } from '@lumenu/keylight'
 import type { HttpClient, HttpResponse } from '@lumenu/keylight'
 
 // Create a mock HTTP client
 class MockHttpClient implements HttpClient {
-  async get<T>(url: string): Promise<HttpResponse<T>> {
-    return { ok: true, status: 200, data: mockData as T }
+  get<T>(url: string): Effect.Effect<HttpResponse<T>, never> {
+    return Effect.succeed({ ok: true, status: 200, data: mockData as T })
   }
 
-  async put<T>(url: string, body: unknown): Promise<HttpResponse<T>> {
-    return { ok: true, status: 200, data: mockData as T }
+  put<T>(url: string, body: unknown): Effect.Effect<HttpResponse<T>, never> {
+    return Effect.succeed({ ok: true, status: 200, data: mockData as T })
   }
 
-  async post<T>(url: string, body?: unknown): Promise<HttpResponse<T>> {
-    return { ok: true, status: 200, data: null as T }
+  post<T>(url: string, body?: unknown): Effect.Effect<HttpResponse<T>, never> {
+    return Effect.succeed({ ok: true, status: 200, data: null as T })
   }
 }
 
 // Inject mock client for testing
-const keylight = new Keylight('192.168.1.61', new MockHttpClient())
+const keylight = Keylight.make('192.168.1.61', {
+  httpClient: new MockHttpClient(),
+})
 
 // Now you can test without making real HTTP requests
-await keylight.turnOn()
+await Effect.runPromise(keylight.turnOn())
 ```
 
 Run the tests:
