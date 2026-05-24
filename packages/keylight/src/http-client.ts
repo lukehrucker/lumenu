@@ -1,4 +1,4 @@
-import { Effect } from 'effect'
+import { Context, Effect, Layer } from 'effect'
 
 import { KeylightConnectionError } from './errors.js'
 
@@ -27,10 +27,16 @@ export interface HttpClient {
   ): Effect.Effect<HttpResponse<T>, KeylightConnectionError>
 }
 
+export const HttpClient = Context.GenericTag<HttpClient>(
+  '@lumenu/keylight/HttpClient'
+)
+
 /**
  * Default HTTP client implementation using native fetch
  */
 export class FetchHttpClient implements HttpClient {
+  static readonly layer = Layer.succeed(HttpClient, new FetchHttpClient())
+
   get<T>(url: string): Effect.Effect<HttpResponse<T>, KeylightConnectionError> {
     return Effect.tryPromise({
       try: async () => {

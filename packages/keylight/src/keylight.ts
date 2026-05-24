@@ -15,16 +15,12 @@ import {
   KeylightValidationError,
 } from './errors.js'
 import type { HttpClient, HttpResponse } from './http-client.js'
-import { FetchHttpClient } from './http-client.js'
+import { HttpClient as HttpClientService } from './http-client.js'
 
 export type KeylightOperationError =
   | KeylightConnectionError
   | KeylightBadRequestError
   | KeylightValidationError
-
-export interface KeylightOptions {
-  httpClient?: HttpClient
-}
 
 /**
  * Temperature conversion utilities
@@ -63,47 +59,57 @@ export class Temperature {
  * @example
  * ```typescript
  * const keylight = Keylight.make('192.168.1.61')
- * await Effect.runPromise(keylight.setBrightness(50))
+ * await Effect.runPromise(
+ *   keylight.setBrightness(50).pipe(Effect.provide(FetchHttpClient.layer))
+ * )
  * ```
  */
 export class Keylight {
   private readonly baseUrl: string
-  private readonly httpClient: HttpClient
 
   /**
    * Create a new Keylight client
    * @param ip IP address of the Keylight device
-   * @param httpClient Optional HTTP client for testing (defaults to FetchHttpClient)
    */
-  constructor(ip: string, httpClient?: HttpClient) {
+  constructor(ip: string) {
     this.baseUrl = `http://${ip}:9123/elgato`
-    this.httpClient = httpClient ?? new FetchHttpClient()
   }
 
   /**
    * Create a new Keylight client
    * @param host IP address or hostname of the Keylight device
-   * @param options Optional client configuration
    */
-  static make(host: string, options: KeylightOptions = {}): Keylight {
-    return new Keylight(host, options.httpClient)
+  static make(host: string): Keylight {
+    return new Keylight(host)
   }
 
   /**
    * Flash the light to identify the device
    */
-  identify(): Effect.Effect<void, KeylightOperationError> {
+  identify(): Effect.Effect<void, KeylightOperationError, HttpClient> {
     return this.request('POST', '/identify', () =>
-      this.httpClient.post<void>(`${this.baseUrl}/identify`)
+      HttpClientService.pipe(
+        Effect.flatMap((httpClient) =>
+          httpClient.post<void>(`${this.baseUrl}/identify`)
+        )
+      )
     ).pipe(Effect.asVoid)
   }
 
   /**
    * Get device accessory information
    */
-  getAccessoryInfo(): Effect.Effect<AccessoryInfo, KeylightOperationError> {
+  getAccessoryInfo(): Effect.Effect<
+    AccessoryInfo,
+    KeylightOperationError,
+    HttpClient
+  > {
     return this.request('GET', '/accessory-info', () =>
-      this.httpClient.get<AccessoryInfo>(`${this.baseUrl}/accessory-info`)
+      HttpClientService.pipe(
+        Effect.flatMap((httpClient) =>
+          httpClient.get<AccessoryInfo>(`${this.baseUrl}/accessory-info`)
+        )
+      )
     )
   }
 
@@ -113,18 +119,26 @@ export class Keylight {
    */
   updateAccessoryInfo(
     info: AccessoryInfoUpdate
-  ): Effect.Effect<AccessoryInfo, KeylightOperationError> {
+  ): Effect.Effect<AccessoryInfo, KeylightOperationError, HttpClient> {
     return this.request('PUT', '/accessory-info', () =>
-      this.httpClient.put<AccessoryInfo>(`${this.baseUrl}/accessory-info`, info)
+      HttpClientService.pipe(
+        Effect.flatMap((httpClient) =>
+          httpClient.put<AccessoryInfo>(`${this.baseUrl}/accessory-info`, info)
+        )
+      )
     )
   }
 
   /**
    * Get current lights status
    */
-  getLights(): Effect.Effect<LightsStatus, KeylightOperationError> {
+  getLights(): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.request('GET', '/lights', () =>
-      this.httpClient.get<LightsStatus>(`${this.baseUrl}/lights`)
+      HttpClientService.pipe(
+        Effect.flatMap((httpClient) =>
+          httpClient.get<LightsStatus>(`${this.baseUrl}/lights`)
+        )
+      )
     )
   }
 
@@ -134,11 +148,15 @@ export class Keylight {
    */
   updateLights(
     lights: LightsUpdate
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.validateLights(lights).pipe(
       Effect.flatMap(() =>
         this.request('PUT', '/lights', () =>
-          this.httpClient.put<LightsStatus>(`${this.baseUrl}/lights`, lights)
+          HttpClientService.pipe(
+            Effect.flatMap((httpClient) =>
+              httpClient.put<LightsStatus>(`${this.baseUrl}/lights`, lights)
+            )
+          )
         )
       )
     )
@@ -150,7 +168,7 @@ export class Keylight {
    */
   setLights(
     light: LightUpdate
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.updateLights({
       numberOfLights: 1,
       lights: [light],
@@ -160,9 +178,17 @@ export class Keylight {
   /**
    * Get light settings
    */
-  getSettings(): Effect.Effect<LightSettings, KeylightOperationError> {
+  getSettings(): Effect.Effect<
+    LightSettings,
+    KeylightOperationError,
+    HttpClient
+  > {
     return this.request('GET', '/lights/settings', () =>
-      this.httpClient.get<LightSettings>(`${this.baseUrl}/lights/settings`)
+      HttpClientService.pipe(
+        Effect.flatMap((httpClient) =>
+          httpClient.get<LightSettings>(`${this.baseUrl}/lights/settings`)
+        )
+      )
     )
   }
 
@@ -172,13 +198,17 @@ export class Keylight {
    */
   updateSettings(
     settings: LightSettingsUpdate
-  ): Effect.Effect<LightSettings, KeylightOperationError> {
+  ): Effect.Effect<LightSettings, KeylightOperationError, HttpClient> {
     return this.validateSettings(settings).pipe(
       Effect.flatMap(() =>
         this.request('PUT', '/lights/settings', () =>
-          this.httpClient.put<LightSettings>(
-            `${this.baseUrl}/lights/settings`,
-            settings
+          HttpClientService.pipe(
+            Effect.flatMap((httpClient) =>
+              httpClient.put<LightSettings>(
+                `${this.baseUrl}/lights/settings`,
+                settings
+              )
+            )
           )
         )
       )
@@ -188,14 +218,14 @@ export class Keylight {
   /**
    * Turn on the light (preserves current brightness and temperature)
    */
-  turnOn(): Effect.Effect<LightsStatus, KeylightOperationError> {
+  turnOn(): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.setLights({ on: 1 })
   }
 
   /**
    * Turn off the light (preserves current brightness and temperature)
    */
-  turnOff(): Effect.Effect<LightsStatus, KeylightOperationError> {
+  turnOff(): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.setLights({ on: 0 })
   }
 
@@ -205,7 +235,7 @@ export class Keylight {
    */
   setBrightness(
     brightness: number
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.setLights({ brightness })
   }
 
@@ -215,7 +245,7 @@ export class Keylight {
    */
   setTemperatureKelvin(
     kelvin: number
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return Effect.try({
       try: () => Temperature.kelvinToApi(kelvin),
       catch: (error: unknown) => error as KeylightValidationError,
@@ -230,7 +260,7 @@ export class Keylight {
    */
   setTemperature(
     temperature: number
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.setLights({ temperature })
   }
 
@@ -240,15 +270,23 @@ export class Keylight {
    */
   setLight(
     options: LightUpdate
-  ): Effect.Effect<LightsStatus, KeylightOperationError> {
+  ): Effect.Effect<LightsStatus, KeylightOperationError, HttpClient> {
     return this.setLights(options)
   }
 
   private request<T>(
     _method: string,
     endpoint: string,
-    makeRequest: () => Effect.Effect<HttpResponse<T>, KeylightConnectionError>
-  ): Effect.Effect<T, KeylightConnectionError | KeylightBadRequestError> {
+    makeRequest: () => Effect.Effect<
+      HttpResponse<T>,
+      KeylightConnectionError,
+      HttpClient
+    >
+  ): Effect.Effect<
+    T,
+    KeylightConnectionError | KeylightBadRequestError,
+    HttpClient
+  > {
     return Effect.gen(function* () {
       const response = yield* makeRequest()
 

@@ -2,7 +2,8 @@ import { describe, expect, test, mock } from 'bun:test'
 import { Effect } from 'effect'
 
 import { Keylight, Temperature } from './keylight.js'
-import type { HttpClient, HttpResponse } from './http-client.js'
+import type { HttpResponse } from './http-client.js'
+import { HttpClient } from './http-client.js'
 import {
   KeylightConnectionError,
   KeylightBadRequestError,
@@ -125,13 +126,16 @@ describe('Keylight', () => {
   let mockClient: MockHttpClient
   let keylight: Keylight
 
-  const run = Effect.runPromise
-  const runError = <A, E>(effect: Effect.Effect<A, E>) =>
-    Effect.runPromise(Effect.flip(effect))
+  const run = <A, E>(effect: Effect.Effect<A, E, HttpClient>) =>
+    Effect.runPromise(Effect.provideService(effect, HttpClient, mockClient))
+  const runError = <A, E>(effect: Effect.Effect<A, E, HttpClient>) =>
+    Effect.runPromise(
+      Effect.provideService(Effect.flip(effect), HttpClient, mockClient)
+    )
 
   const setup = () => {
     mockClient = new MockHttpClient()
-    keylight = new Keylight('192.168.1.61', mockClient)
+    keylight = new Keylight('192.168.1.61')
   }
 
   describe('constructor', () => {
@@ -140,9 +144,8 @@ describe('Keylight', () => {
       expect(kl).toBeInstanceOf(Keylight)
     })
 
-    test('accepts custom HTTP client', () => {
-      const customClient = new MockHttpClient()
-      const kl = new Keylight('192.168.1.61', customClient)
+    test('creates instance with factory', () => {
+      const kl = Keylight.make('192.168.1.61')
       expect(kl).toBeInstanceOf(Keylight)
     })
   })
