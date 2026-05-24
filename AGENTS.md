@@ -346,3 +346,17 @@ export { Card, CardHeader, CardTitle, CardContent, CardFooter }
 - **ES Modules only** - no CommonJS
 - **Strict TypeScript** - respect all strict mode flags
 - **No unused variables** - disabled in keylight/tui, enabled in UI package
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `luke-rucker/lumenu`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the default five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Domain documentation uses a single-context layout with root `CONTEXT.md` and root `docs/adr/`. See `docs/agents/domain.md`.
