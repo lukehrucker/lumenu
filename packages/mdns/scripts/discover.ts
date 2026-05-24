@@ -1,4 +1,5 @@
 import { Mdns } from '../src/index.js'
+import { Effect } from 'effect'
 
 /**
  * Discover Elgato Key Lights on the local network using mDNS
@@ -12,10 +13,12 @@ import { Mdns } from '../src/index.js'
 const DISCOVERY_TIMEOUT = 5000 // 5 seconds
 const SERVICE_TYPE = 'elg'
 
-const ips = await Mdns.discover({
-  serviceType: SERVICE_TYPE,
-  timeout: DISCOVERY_TIMEOUT,
-})
+const ips = await Effect.runPromise(
+  Mdns.discover({
+    serviceType: SERVICE_TYPE,
+    timeout: DISCOVERY_TIMEOUT,
+  })
+)
 
 if (ips.length === 0) {
   console.log('No Elgato Key Lights found on the network')

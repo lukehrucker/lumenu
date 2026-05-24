@@ -12,11 +12,13 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
+    "lefthook": "2.1.8",
     "oxfmt": "^0.24.0",
     "oxlint": "^1.39.0"
   },
   "catalog": {
     "typescript": "^5",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "effect": "^3"
   }
 }
