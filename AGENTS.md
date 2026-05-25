@@ -9,7 +9,7 @@
 - `packages/tui` - Terminal UI (OpenTUI + React)
 - `packages/mdns` - mDNS service discovery (stub)
 
-**Stack**: Bun runtime, TypeScript, ES Modules, oxlint/oxfmt, Lefthook
+**Stack**: Bun runtime, TypeScript, ES Modules, Effect, oxlint/oxfmt, Lefthook
 
 ## Build, Lint, Test Commands
 
@@ -130,6 +130,15 @@ function example() {
 ```
 
 ### TypeScript Conventions
+
+**Use Effect for fallible operations:**
+
+- Package APIs that perform I/O, network calls, storage, discovery, or other
+  fallible work should return `Effect.Effect<Success, Error, Requirements>`.
+- Model typed failures with tagged errors from `effect` instead of throwing raw
+  errors from public APIs.
+- Keep synchronous helpers private when they make the public Effect API simpler.
+- Tests can unwrap effects with `Effect.runPromise()`.
 
 **Use interfaces for object shapes:**
 
