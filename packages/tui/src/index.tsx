@@ -6,6 +6,7 @@ import * as React from 'react'
 
 import { CenteredMessage } from './components/centered-message.js'
 import { AppShell } from './components/app-shell.js'
+import { DashboardScreen } from './components/dashboard-screen.js'
 import { HelpBar } from './components/help-bar.js'
 import { OnboardingScreen } from './components/onboarding-screen.js'
 import { useDevicesQuery } from './core/devices.js'
@@ -60,16 +61,14 @@ function App() {
   }
 
   return (
-    <box flexDirection="column" flexGrow={1} padding={1}>
-      <text>Saved Lights</text>
-      <box flexDirection="column" marginTop={1}>
-        {devices.data.map((device) => (
-          <text key={device.serialNumber}>
-            {device.displayName} ({device.host})
-          </text>
-        ))}
-      </box>
-    </box>
+    <AppShell
+      help={<HelpBar shortcuts={['j/k move', 'a add device', 'q quit']} />}
+    >
+      <DashboardScreen
+        devices={devices.data}
+        onAddDevice={() => setRoute('onboarding')}
+      />
+    </AppShell>
   )
 }
 

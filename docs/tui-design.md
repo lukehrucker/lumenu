@@ -84,12 +84,24 @@ scoping.
 
 ## Main Dashboard
 
-- The primary layout should be a two-pane dashboard.
-- The left pane should be a selectable device list with status summaries.
-- The right pane should show controls and details for the selected light.
-- On narrow terminals, the dashboard should collapse into a single-pane flow:
-  list first, then Enter opens the selected light detail/control view.
-- Initial dashboard control scope is single-light control only.
+- The primary layout should be a single dashboard containing one card per saved
+  light.
+- Each light card should show high-level status and common inline controls.
+- Each light card should use a compact three-row hierarchy:
+  - Row 1: display name, reachability, and power state.
+  - Row 2: brightness and temperature summary using readable bar-like controls.
+  - Row 3: focusable control targets.
+- Inline card controls should include power, brightness, temperature, refresh,
+  and details.
+- Detailed metadata and less-common actions should open in a modal for the
+  selected light instead of living in a second dashboard pane.
+- The dashboard should remain usable as a single-column card list on narrow
+  terminals.
+- The dashboard card list should be scrollable from the first implementation;
+  moving selection should keep the selected card visible.
+- Initial dashboard control scope is per-light control only.
+- Each dashboard card should track a runtime status: `loading`, `online`,
+  `offline`, or `updating`.
 - Multi-light group control, named groups, and preset scenes are out of scope for
   the first version.
 
@@ -104,8 +116,14 @@ scoping.
 - Brightness and temperature should have focusable slider UI.
 - Brightness and temperature should also support shortcut keys for fast
   adjustment.
+- Keyboard brightness adjustments should move in 5 percentage point steps.
+- Keyboard temperature adjustments should move in 100K steps.
 - Slider and shortcut changes should send updates immediately with throttling.
 - The UI should use optimistic local state while device requests are in flight.
+- Brightness and temperature controls should not require Enter-to-apply edit
+  mode; `h`/`l` changes should update the visible value immediately.
+- Esc should not undo brightness or temperature changes because updates may have
+  already been sent to the device.
 - Throttling should prevent flooding the device while preserving a live-control
   feel.
 
@@ -114,6 +132,8 @@ scoping.
 - Saved devices should remain visible when offline or unreachable.
 - Offline devices should show an error/offline status and dimmed last-known
   state.
+- Offline devices should keep refresh and details available, but disable power,
+  brightness, and temperature controls until the light is reachable again.
 - The user should be able to retry or refresh a saved device.
 - The app should not remove saved devices automatically because network/device
   failures can be transient.
@@ -122,12 +142,13 @@ scoping.
 
 ## Device Detail Screen
 
-- There should be a dedicated device detail/settings screen beyond the dashboard
-  panel.
+- There should be a device detail/settings modal opened from a light card.
 - The dashboard should keep common controls visible.
-- The detail screen should contain less-frequent actions and metadata, such as:
+- The first detail modal should contain read-only metadata, current/last-known
+  state, `Identify`, and `Close`.
+- Later detail modal scope can include less-frequent actions and metadata, such
+  as:
   - Rename.
-  - Identify.
   - Forget device.
   - Firmware/model details.
   - Power-on behavior.
@@ -140,8 +161,11 @@ scoping.
 ## Navigation
 
 - The TUI should use hybrid arrow-key and Vim-style navigation.
-- Arrow keys and `j`/`k` should move selection.
-- Tab should cycle focus groups.
+- On the dashboard, `j`/`k` or arrows should move between light cards.
+- The dashboard should use a two-level focus model: one selected card, plus one
+  focused control within that card.
+- Tab should cycle controls within the selected card.
+- When brightness or temperature is focused, `h`/`l` should adjust the value.
 - Enter should activate or open the selected item.
 - Space should toggle selection where applicable.
 - Esc should go back or close overlays.
