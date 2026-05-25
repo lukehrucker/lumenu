@@ -2,8 +2,12 @@ import { createRoot } from '@opentui/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { NodeRuntime } from '@effect/platform-node'
 import { Cause, Effect, Exit, ManagedRuntime } from 'effect'
+import * as React from 'react'
 
 import { CenteredMessage } from './components/centered-message.js'
+import { AppShell } from './components/app-shell.js'
+import { HelpBar } from './components/help-bar.js'
+import { OnboardingScreen } from './components/onboarding-screen.js'
 import { useDevicesQuery } from './core/devices.js'
 import {
   lumenuLayer,
@@ -16,6 +20,9 @@ const queryClient = new QueryClient()
 
 function App() {
   const devices = useDevicesQuery()
+  const [route, setRoute] = React.useState<'onboarding' | 'dashboard'>(
+    'dashboard'
+  )
 
   if (devices.isPending) {
     return <CenteredMessage title="Lumenu" message="Loading saved lights..." />
@@ -31,12 +38,24 @@ function App() {
     )
   }
 
-  if (devices.data.length === 0) {
+  if (devices.data.length === 0 || route === 'onboarding') {
     return (
-      <CenteredMessage
-        title="No Saved Lights"
-        message="Onboarding discovery will start here."
-      />
+      <AppShell
+        help={
+          <HelpBar
+            shortcuts={[
+              'j/k move',
+              'space select',
+              'i identify',
+              'r rescan',
+              'enter save',
+              'q quit',
+            ]}
+          />
+        }
+      >
+        <OnboardingScreen onSaved={() => setRoute('dashboard')} />
+      </AppShell>
     )
   }
 
