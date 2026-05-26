@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "openapi:gen": "openapi-ts -f openapi-ts.config.ts",
     "test": "bun test"
   },
   "dependencies": {

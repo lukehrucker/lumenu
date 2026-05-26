@@ -4,6 +4,7 @@
     "typescript/no-explicit-any": "warn",
     "unicorn/filename-case": "off"
   },
+  "ignorePatterns": ["packages/keylight/src/generated/**"],
   "settings": {},
   "env": {
     "browser": true,

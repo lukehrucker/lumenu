@@ -9,9 +9,12 @@
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
+    "openapi:gen": "bun --filter @lumenu/keylight openapi:gen",
     "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@hey-api/client-fetch": "0.13.1",
+    "@hey-api/openapi-ts": "0.97.3",
     "lefthook": "2.1.8",
     "oxfmt": "^0.24.0",
     "oxlint": "^1.39.0"

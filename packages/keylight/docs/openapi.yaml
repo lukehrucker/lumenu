@@ -1,0 +1,448 @@
+openapi: 3.1.0
+info:
+  title: Elgato Key Light API
+  version: 1.0.0
+  description: |
+    HTTP API for Elgato Key Light and Key Light Air devices.
+
+    Devices are controlled over the local network on port 9123. The API does
+    not require authentication.
+servers:
+  - url: http://{deviceIp}:9123
+    description: Local Key Light device
+    variables:
+      deviceIp:
+        default: 192.168.1.61
+        description: Device IP address from DHCP, router, or Control Center.
+tags:
+  - name: Identify
+    description: Physical device identification.
+  - name: Accessory Info
+    description: Device hardware information and metadata.
+  - name: Lights
+    description: Light power, brightness, and color temperature control.
+  - name: Settings
+    description: Power-on and transition behavior settings.
+paths:
+  /elgato/identify:
+    post:
+      tags:
+        - Identify
+      operationId: identifyDevice
+      summary: Identify device
+      description: Flash the light to identify a specific device.
+      responses:
+        '200':
+          description: Device identification started.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /elgato/accessory-info:
+    get:
+      tags:
+        - Accessory Info
+      operationId: getAccessoryInfo
+      summary: Get accessory info
+      description: Retrieve device hardware specifications and metadata.
+      responses:
+        '200':
+          description: Device hardware information and metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessoryInfo'
+              examples:
+                keyLight:
+                  value:
+                    productName: Elgato Key Light
+                    hardwareBoardType: 53
+                    firmwareBuildNumber: 192
+                    firmwareVersion: 1.0.3
+                    serialNumber: XXXXXXXXXXXX
+                    displayName: ''
+                    features:
+                      - lights
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    put:
+      tags:
+        - Accessory Info
+      operationId: updateAccessoryInfo
+      summary: Update accessory info
+      description: Modify device hardware information, primarily display name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessoryInfoUpdate'
+            examples:
+              rename:
+                value:
+                  displayName: MyKeyLight
+      responses:
+        '200':
+          description: Updated device hardware information and metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessoryInfo'
+              examples:
+                renamed:
+                  value:
+                    productName: Elgato Key Light
+                    hardwareBoardType: 53
+                    firmwareBuildNumber: 192
+                    firmwareVersion: 1.0.3
+                    serialNumber: XXXXXXXXXXXX
+                    displayName: MyKeyLight
+                    features:
+                      - lights
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /elgato/lights:
+    get:
+      tags:
+        - Lights
+      operationId: getLightsStatus
+      summary: Get lights status
+      description: Retrieve current lighting state, brightness, and color temperature.
+      responses:
+        '200':
+          description: Current lighting state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightsStatus'
+              examples:
+                off:
+                  value:
+                    numberOfLights: 1
+                    lights:
+                      - on: 0
+                        brightness: 25
+                        temperature: 166
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    put:
+      tags:
+        - Lights
+      operationId: updateLightsStatus
+      summary: Update lights status
+      description: Control light power, brightness, and color temperature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightsUpdate'
+            examples:
+              onBrightnessTemperature:
+                summary: Turn on and set brightness and temperature
+                value:
+                  numberOfLights: 1
+                  lights:
+                    - on: 1
+                      brightness: 78
+                      temperature: 266
+              off:
+                summary: Turn off while preserving other settings
+                value:
+                  numberOfLights: 1
+                  lights:
+                    - on: 0
+      responses:
+        '200':
+          description: Updated lighting state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightsStatus'
+              examples:
+                updated:
+                  value:
+                    numberOfLights: 1
+                    lights:
+                      - on: 1
+                        brightness: 78
+                        temperature: 266
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /elgato/lights/settings:
+    get:
+      tags:
+        - Settings
+      operationId: getLightSettings
+      summary: Get light settings
+      description: Retrieve power-on state and transition timing settings.
+      responses:
+        '200':
+          description: Device behavior settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightSettings'
+              examples:
+                default:
+                  value:
+                    powerOnBehavior: 1
+                    powerOnBrightness: 20
+                    powerOnTemperature: 213
+                    switchOnDurationMs: 100
+                    switchOffDurationMs: 300
+                    colorChangeDurationMs: 100
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    put:
+      tags:
+        - Settings
+      operationId: updateLightSettings
+      summary: Update light settings
+      description: Modify power-on state and transition timing settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightSettingsUpdate'
+            examples:
+              powerOnBehavior:
+                value:
+                  powerOnBehavior: 0
+      responses:
+        '200':
+          description: Updated device behavior settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightSettings'
+              examples:
+                updated:
+                  value:
+                    powerOnBehavior: 0
+                    powerOnBrightness: 20
+                    powerOnTemperature: 213
+                    switchOnDurationMs: 100
+                    switchOffDurationMs: 300
+                    colorChangeDurationMs: 100
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  responses:
+    BadRequest:
+      description: Malformed request syntax.
+      content:
+        application/json:
+          schema:
+            type: object
+            description: Error response body is not documented by the device API.
+            additionalProperties: true
+  schemas:
+    AccessoryInfo:
+      type: object
+      required:
+        - productName
+        - hardwareBoardType
+        - firmwareBuildNumber
+        - firmwareVersion
+        - serialNumber
+        - displayName
+        - features
+      properties:
+        productName:
+          type: string
+          description: Product model name.
+        hardwareBoardType:
+          type: integer
+          description: Hardware board identifier.
+        firmwareBuildNumber:
+          type: integer
+          description: Firmware build number.
+        firmwareVersion:
+          type: string
+          description: Firmware version string.
+        serialNumber:
+          type: string
+          description: Device serial number.
+        displayName:
+          type: string
+          description: User-defined device name.
+        features:
+          type: array
+          description: Supported feature strings.
+          items:
+            type: string
+            examples:
+              - lights
+    AccessoryInfoUpdate:
+      type: object
+      description: Partial accessory info update.
+      properties:
+        productName:
+          type: string
+          description: Product model name.
+        hardwareBoardType:
+          type: integer
+          description: Hardware board identifier.
+        firmwareBuildNumber:
+          type: integer
+          description: Firmware build number.
+        firmwareVersion:
+          type: string
+          description: Firmware version string.
+        serialNumber:
+          type: string
+          description: Device serial number.
+        displayName:
+          type: string
+          description: User-defined device name.
+        features:
+          type: array
+          description: Supported feature strings.
+          items:
+            type: string
+    Light:
+      type: object
+      required:
+        - on
+        - brightness
+        - temperature
+      properties:
+        on:
+          type: integer
+          enum:
+            - 0
+            - 1
+          description: Power state, where 0 is off and 1 is on.
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Brightness percentage.
+        temperature:
+          type: integer
+          minimum: 143
+          maximum: 344
+          description: |
+            Color temperature in Elgato API format. Convert with
+            `temperature = (1000000 / kelvin) - 10`; range represents roughly
+            7000K to 2900K.
+    LightUpdate:
+      type: object
+      properties:
+        on:
+          type: integer
+          enum:
+            - 0
+            - 1
+          description: Power state, where 0 is off and 1 is on.
+        brightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Brightness percentage.
+        temperature:
+          type: integer
+          minimum: 143
+          maximum: 344
+          description: Color temperature in Elgato API format.
+    LightsStatus:
+      type: object
+      required:
+        - numberOfLights
+        - lights
+      properties:
+        numberOfLights:
+          type: integer
+          minimum: 0
+          description: Number of light elements in the array.
+        lights:
+          type: array
+          description: Light objects.
+          items:
+            $ref: '#/components/schemas/Light'
+    LightsUpdate:
+      type: object
+      required:
+        - numberOfLights
+        - lights
+      properties:
+        numberOfLights:
+          type: integer
+          minimum: 1
+          description: Number of lights in the array, typically 1.
+        lights:
+          type: array
+          minItems: 1
+          description: Light objects to update.
+          items:
+            $ref: '#/components/schemas/LightUpdate'
+    LightSettings:
+      type: object
+      required:
+        - powerOnBehavior
+        - powerOnBrightness
+        - powerOnTemperature
+        - switchOnDurationMs
+        - switchOffDurationMs
+        - colorChangeDurationMs
+      properties:
+        powerOnBehavior:
+          type: integer
+          enum:
+            - 0
+            - 1
+          description: Power-on behavior, where 0 restores last state and 1 uses defaults.
+        powerOnBrightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Default brightness when powered on.
+        powerOnTemperature:
+          type: integer
+          minimum: 143
+          maximum: 344
+          description: Default color temperature in Elgato API format.
+        switchOnDurationMs:
+          type: integer
+          minimum: 0
+          description: Fade-in duration in milliseconds.
+        switchOffDurationMs:
+          type: integer
+          minimum: 0
+          description: Fade-out duration in milliseconds.
+        colorChangeDurationMs:
+          type: integer
+          minimum: 0
+          description: Color and brightness transition duration in milliseconds.
+    LightSettingsUpdate:
+      type: object
+      description: Partial light settings update.
+      properties:
+        powerOnBehavior:
+          type: integer
+          enum:
+            - 0
+            - 1
+          description: Power-on behavior setting.
+        powerOnBrightness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Default brightness when powered on.
+        powerOnTemperature:
+          type: integer
+          minimum: 143
+          maximum: 344
+          description: Default color temperature in Elgato API format.
+        switchOnDurationMs:
+          type: integer
+          minimum: 0
+          description: Fade-in duration in milliseconds.
+        switchOffDurationMs:
+          type: integer
+          minimum: 0
+          description: Fade-out duration in milliseconds.
+        colorChangeDurationMs:
+          type: integer
+          minimum: 0
+          description: Color and brightness transition duration in milliseconds.
