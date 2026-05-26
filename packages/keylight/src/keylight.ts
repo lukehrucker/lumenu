@@ -89,7 +89,7 @@ export class Keylight {
    * Flash the light to identify the device
    */
   identify(): Effect.Effect<void, KeylightOperationError> {
-    return this.request<void>('/identify', {
+    return this.request('/identify', {
       method: 'POST',
       expectJson: false,
     }).pipe(Effect.asVoid)

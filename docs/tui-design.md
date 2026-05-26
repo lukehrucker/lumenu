@@ -95,6 +95,8 @@ scoping.
   - Status row: reachability/runtime state.
 - The selected target should be a grid cell, not a whole light card plus nested
   control target.
+- The selected cell should be visibly framed, while the selected light column and
+  selected control row should both be easy to scan.
 - The initial focusable dashboard cells should be power, brightness, and
   temperature for each saved light.
 - Refresh, identify, and details should be shortcut-driven actions for the
@@ -107,6 +109,9 @@ scoping.
 - The fader board should be horizontally scrollable from the first implementation
   if all saved lights do not fit; moving selection should keep the selected
   light column visible.
+- Brightness and temperature rows should use smooth Unicode faders rather than
+  ASCII progress bars, with color communicating the active value where the
+  terminal supports it.
 - Initial dashboard control scope is per-light control only.
 - Each saved light should track a runtime status: `loading`, `online`,
   `offline`, or `updating`.
@@ -123,34 +128,30 @@ Lumenu Faders                                      Cached state shown
              Desk Key       Fill          Hair
 +-------------------------------------------------------------+
 | Power       ON            OFF           ?                   |
-| Bright      <72%>         0%            --                  |
-|             [#######---]  [----------]  [----------]        |
-| Temp        4200K         3900K         ----                |
-|             [######----]  [#####-----]  [----------]        |
+| Bright      <72%> ▐███████▎░░▌ 0% █░░░░░░░░░  -- ░░░░░░░░░░ |
+| Temp        4200K █████▌░░░░ 3900K ████▉░░░░░ ---- ░░░░░░░░░░|
 | Status      online        online        offline             |
 +-------------------------------------------------------------+
 
 Selected: Desk Key / Brightness
-enter edit   h/l light   j/k row   r refresh   d details   a add   q quit
+h/l adjust   left/right light   j/k row   r refresh   d details   q quit
 ```
 
 Live adjustment state:
 
 ```text
-Lumenu Faders                                      Editing brightness
+Lumenu Faders                                      Updating Desk Key
 
              Desk Key       Fill          Hair
 +-------------------------------------------------------------+
 | Power       ON            OFF           ?                   |
-| Bright      <75%>         0%            --                  |
-|             [########--]  [----------]  [----------]        |
-| Temp        4200K         3900K         ----                |
-|             [######----]  [#####-----]  [----------]        |
+| Bright      <75%> ▐███████▌░░▌* 0% █░░░░░░░░░  -- ░░░░░░░░░░ |
+| Temp        4200K █████▌░░░░ 3900K ████▉░░░░░ ---- ░░░░░░░░░░|
 | Status      updating      online        offline             |
 +-------------------------------------------------------------+
 
-Editing: Desk Key / Brightness
-h/l adjust 5   H/L adjust 10   enter done   esc close   q quit
+Selected: Desk Key / Brightness
+h/l adjust 5   H/L adjust 10   arrows move   esc close overlay   q quit
 ```
 
 Horizontally scrolled layout for many lights:
@@ -161,15 +162,13 @@ Lumenu Faders                         Showing lights 3-5 of 8
              Hair          Shelf         Window
 +-------------------------------------------------------------+
 | Power       ON            ON            OFF                 |
-| Bright      45%           <60%>         0%                  |
-|             [#####-----]  [######----]  [----------]        |
-| Temp        5000K         4400K         3900K               |
-|             [########--]  [######----]  [#####-----]        |
+| Bright      45% ████▌░░░░░ <60%> ▐██████░░░░▌ 0% █░░░░░░░░░ |
+| Temp        5000K ███████░░░ 4400K █████▉░░░░ 3900K ████▉░░░|
 | Status      online        online        online              |
 +-------------------------------------------------------------+
 
 Selected: Shelf / Brightness
-h/l light   j/k row   r refresh   d details   a add   q quit
+h/l adjust   left/right light   j/k row   r refresh   d details   q quit
 ```
 
 Narrow-terminal fallback:
@@ -178,18 +177,18 @@ Narrow-terminal fallback:
 Lumenu Faders
 
 > Desk Key      online ON
-  Bright <72%>  [#######---]
-  Temp   4200K  [######----]
+  Bright <72%>  ▐███████▎░░▌
+  Temp   4200K  █████▌░░░░
 
   Fill          online OFF
-  Bright 0%     [----------]
-  Temp   3900K  [#####-----]
+  Bright 0%     █░░░░░░░░░
+  Temp   3900K  ████▉░░░░░
 
   Hair          offline ?
-  Bright --     [----------]
-  Temp   ----   [----------]
+  Bright --     ░░░░░░░░░░
+  Temp   ----   ░░░░░░░░░░
 
-j/k row   h/l light   enter edit   r refresh   d details   q quit
+h/l adjust   left/right light   j/k row   r refresh   d details   q quit
 ```
 
 ## Device Controls
@@ -200,7 +199,8 @@ j/k row   h/l light   enter edit   r refresh   d details   q quit
   - Temperature.
   - Identify/flash.
   - Refresh/retry.
-- Brightness and temperature should have focusable slider UI.
+- Brightness and temperature should have focusable slider UI using Unicode block
+  segments for smooth fader movement.
 - Brightness and temperature should also support shortcut keys for fast
   adjustment.
 - Keyboard brightness adjustments should move in 5 percentage point steps.
@@ -209,6 +209,7 @@ j/k row   h/l light   enter edit   r refresh   d details   q quit
 - The UI should use optimistic local state while device requests are in flight.
 - Brightness and temperature controls should not require Enter-to-apply edit
   mode; `h`/`l` changes should update the visible value immediately.
+- Enter should not be required to begin brightness or temperature adjustment.
 - Esc should not undo brightness or temperature changes because updates may have
   already been sent to the device.
 - Throttling should prevent flooding the device while preserving a live-control
@@ -248,7 +249,8 @@ j/k row   h/l light   enter edit   r refresh   d details   q quit
 ## Navigation
 
 - The TUI should use hybrid arrow-key and Vim-style navigation.
-- On the dashboard, `h`/`l` or left/right should move between light columns.
+- On the dashboard, left/right should move between light columns.
+- `H`/`L` may also move between light columns for Vim-style keyboard users.
 - On the dashboard, `j`/`k` or up/down should move between control rows.
 - The dashboard should use a single grid-cell focus model: selected light column
   plus selected control row.
@@ -257,8 +259,8 @@ j/k row   h/l light   enter edit   r refresh   d details   q quit
 - When brightness or temperature is focused, `h`/`l` should adjust the value.
 - Enter should activate or open the selected item.
 - Enter on power should toggle the selected light.
-- Enter on brightness or temperature may enter an adjustment mode if needed, but
-  direct `h`/`l` adjustment remains the preferred live-control interaction.
+- Enter on brightness or temperature should do nothing or open exact numeric edit
+  later; the first implementation should use direct `h`/`l` live adjustment.
 - Space should toggle selection where applicable.
 - Esc should go back or close overlays.
 - `?` should open help.

@@ -62,7 +62,19 @@ function App() {
 
   return (
     <AppShell
-      help={<HelpBar shortcuts={['j/k move', 'a add device', 'q quit']} />}
+      help={
+        <HelpBar
+          shortcuts={[
+            'j/k move card',
+            'tab focus control',
+            'h/l adjust focus',
+            'r refresh',
+            'i identify',
+            'a add',
+            'q quit',
+          ]}
+        />
+      }
     >
       <DashboardScreen
         devices={devices.data}
