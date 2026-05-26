@@ -21,8 +21,9 @@
  * ```
  */
 
-export { Keylight, Temperature } from './keylight.js'
+export { Keylight } from './keylight.js'
 export type { KeylightOperationError } from './keylight.js'
+export { Temperature } from './temperature.js'
 export {
   KeylightError,
   KeylightConnectionError,
