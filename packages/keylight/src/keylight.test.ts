@@ -1,14 +1,5 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  test,
-} from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { Effect } from 'effect'
-import { http, HttpResponse } from 'msw'
-import { setupServer } from 'msw/node'
 
 import { Keylight, Temperature } from './keylight.js'
 import {
@@ -16,14 +7,10 @@ import {
   KeylightBadRequestError,
   KeylightValidationError,
 } from './errors.js'
-import type { AccessoryInfo, LightsStatus, LightSettings } from './types.js'
+import { setupKeylight, setupKeylightMockServer } from './test/keylight-msw.js'
+import type { LightSettings } from './types.js'
 
-const baseUrl = 'http://192.168.1.61:9123/elgato'
-const server = setupServer()
-
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => server.resetHandlers())
-afterAll(() => server.close())
+setupKeylightMockServer()
 
 describe('Temperature', () => {
   describe('kelvinToApi', () => {
@@ -89,8 +76,6 @@ describe('Temperature', () => {
 })
 
 describe('Keylight', () => {
-  const setup = () => new Keylight('192.168.1.61')
-
   describe('constructor', () => {
     test('creates instance with IP address', () => {
       const keylight = new Keylight('192.168.1.61')
@@ -105,40 +90,30 @@ describe('Keylight', () => {
 
   describe('identify', () => {
     test('calls POST /identify endpoint', async () => {
-      const keylight = setup()
-      let called = false
-
-      server.use(
-        http.post(`${baseUrl}/identify`, () => {
-          called = true
-          return new HttpResponse(null)
-        })
-      )
+      const { device, keylight } = setupKeylight()
 
       await Effect.runPromise(keylight.identify())
 
-      expect(called).toBe(true)
+      expect(device.requests).toContainEqual(
+        expect.objectContaining({
+          method: 'POST',
+          pathname: '/elgato/identify',
+        })
+      )
     })
 
     test('throws KeylightBadRequestError on 400', async () => {
-      const keylight = setup()
+      const { device, keylight } = setupKeylight()
+      device.useBadRequest('POST', '/identify')
 
-      server.use(
-        http.post(
-          `${baseUrl}/identify`,
-          () => new HttpResponse(null, { status: 400 })
-        )
-      )
-
-      await expect(
+      expect(
         Effect.runPromise(Effect.flip(keylight.identify()))
       ).resolves.toBeInstanceOf(KeylightBadRequestError)
     })
 
     test('throws KeylightConnectionError on network error', async () => {
-      const keylight = setup()
-
-      server.use(http.post(`${baseUrl}/identify`, () => HttpResponse.error()))
+      const { device, keylight } = setupKeylight()
+      device.useNetworkError('POST', '/identify')
 
       await expect(
         Effect.runPromise(Effect.flip(keylight.identify()))
@@ -148,8 +123,7 @@ describe('Keylight', () => {
 
   describe('getAccessoryInfo', () => {
     test('returns accessory info', async () => {
-      const keylight = setup()
-      const mockInfo: AccessoryInfo = {
+      const accessoryInfo = {
         productName: 'Elgato Key Light',
         hardwareBoardType: 53,
         firmwareBuildNumber: 192,
@@ -158,25 +132,16 @@ describe('Keylight', () => {
         displayName: 'My Light',
         features: ['lights'],
       }
-
-      server.use(
-        http.get(`${baseUrl}/accessory-info`, () => HttpResponse.json(mockInfo))
-      )
+      const { keylight } = setupKeylight({ accessoryInfo })
 
       const result = await Effect.runPromise(keylight.getAccessoryInfo())
 
-      expect(result).toEqual(mockInfo)
+      expect(result).toEqual(accessoryInfo)
     })
 
     test('throws KeylightBadRequestError on 400', async () => {
-      const keylight = setup()
-
-      server.use(
-        http.get(
-          `${baseUrl}/accessory-info`,
-          () => new HttpResponse(null, { status: 400 })
-        )
-      )
+      const { device, keylight } = setupKeylight()
+      device.useBadRequest('GET', '/accessory-info')
 
       await expect(
         Effect.runPromise(Effect.flip(keylight.getAccessoryInfo()))
@@ -186,77 +151,57 @@ describe('Keylight', () => {
 
   describe('updateAccessoryInfo', () => {
     test('updates accessory info', async () => {
-      const keylight = setup()
+      const { device, keylight } = setupKeylight()
       const update = { displayName: 'New Name' }
-      const mockResponse: AccessoryInfo = {
-        productName: 'Elgato Key Light',
-        hardwareBoardType: 53,
-        firmwareBuildNumber: 192,
-        firmwareVersion: '1.0.3',
-        serialNumber: 'XXXXXXXXXXXX',
-        displayName: 'New Name',
-        features: ['lights'],
-      }
-
-      server.use(
-        http.put(`${baseUrl}/accessory-info`, async ({ request }) => {
-          expect(await request.json()).toEqual(update)
-          return HttpResponse.json(mockResponse)
-        })
-      )
 
       const result = await Effect.runPromise(
         keylight.updateAccessoryInfo(update)
       )
 
-      expect(result).toEqual(mockResponse)
+      expect(result).toEqual(device.getState().accessoryInfo)
+      expect(result.displayName).toBe('New Name')
+      expect(device.requests.at(-1)).toMatchObject({
+        method: 'PUT',
+        pathname: '/elgato/accessory-info',
+        body: update,
+      })
     })
   })
 
   describe('getLights', () => {
     test('returns lights status', async () => {
-      const keylight = setup()
-      const mockStatus: LightsStatus = {
+      const lights = {
         numberOfLights: 1,
-        lights: [{ on: 1, brightness: 50, temperature: 200 }],
+        lights: [{ on: 1 as const, brightness: 50, temperature: 200 }],
       }
-
-      server.use(
-        http.get(`${baseUrl}/lights`, () => HttpResponse.json(mockStatus))
-      )
+      const { keylight } = setupKeylight({ lights })
 
       const result = await Effect.runPromise(keylight.getLights())
 
-      expect(result).toEqual(mockStatus)
+      expect(result).toEqual(lights)
     })
   })
 
   describe('updateLights', () => {
     test('updates lights status', async () => {
-      const keylight = setup()
+      const { device, keylight } = setupKeylight()
       const update = {
         numberOfLights: 1,
         lights: [{ on: 1 as const, brightness: 75, temperature: 200 }],
       }
-      const mockResponse: LightsStatus = {
-        numberOfLights: 1,
-        lights: [{ on: 1, brightness: 75, temperature: 200 }],
-      }
-
-      server.use(
-        http.put(`${baseUrl}/lights`, async ({ request }) => {
-          expect(await request.json()).toEqual(update)
-          return HttpResponse.json(mockResponse)
-        })
-      )
 
       const result = await Effect.runPromise(keylight.updateLights(update))
 
-      expect(result).toEqual(mockResponse)
+      expect(result).toEqual(device.getState().lights)
+      expect(device.requests.at(-1)).toMatchObject({
+        method: 'PUT',
+        pathname: '/elgato/lights',
+        body: update,
+      })
     })
 
     test('validates brightness range', async () => {
-      const keylight = setup()
+      const { keylight } = setupKeylight()
       const update = {
         numberOfLights: 1,
         lights: [{ brightness: 101 }],
@@ -268,7 +213,7 @@ describe('Keylight', () => {
     })
 
     test('validates temperature range', async () => {
-      const keylight = setup()
+      const { keylight } = setupKeylight()
       const update = {
         numberOfLights: 1,
         lights: [{ temperature: 400 }],
@@ -282,8 +227,7 @@ describe('Keylight', () => {
 
   describe('getSettings', () => {
     test('returns settings', async () => {
-      const keylight = setup()
-      const mockSettings: LightSettings = {
+      const settings: LightSettings = {
         powerOnBehavior: 1,
         powerOnBrightness: 20,
         powerOnTemperature: 213,
@@ -292,58 +236,45 @@ describe('Keylight', () => {
         colorChangeDurationMs: 100,
       }
 
-      server.use(
-        http.get(`${baseUrl}/lights/settings`, () =>
-          HttpResponse.json(mockSettings)
-        )
-      )
-
+      const { keylight } = setupKeylight({ settings })
       const result = await Effect.runPromise(keylight.getSettings())
-
-      expect(result).toEqual(mockSettings)
+      expect(result).toEqual(settings)
     })
   })
 
   describe('updateSettings', () => {
     test('updates settings', async () => {
-      const keylight = setup()
-      const update = { powerOnBehavior: 0 as const }
-      const mockResponse: LightSettings = {
-        powerOnBehavior: 0,
-        powerOnBrightness: 20,
-        powerOnTemperature: 213,
-        switchOnDurationMs: 100,
-        switchOffDurationMs: 300,
-        colorChangeDurationMs: 100,
-      }
-
-      server.use(
-        http.put(`${baseUrl}/lights/settings`, async ({ request }) => {
-          expect(await request.json()).toEqual(update)
-          return HttpResponse.json(mockResponse)
-        })
-      )
+      const { device, keylight } = setupKeylight()
+      const update: Partial<LightSettings> = { powerOnBehavior: 0 }
 
       const result = await Effect.runPromise(keylight.updateSettings(update))
 
-      expect(result).toEqual(mockResponse)
+      expect(result).toEqual(device.getState().settings)
+      expect(result.powerOnBehavior).toBe(0)
+      expect(device.requests.at(-1)).toMatchObject({
+        method: 'PUT',
+        pathname: '/elgato/lights/settings',
+        body: update,
+      })
     })
 
     test('validates powerOnBrightness range', async () => {
-      const keylight = setup()
-      const update = { powerOnBrightness: 150 }
+      const { keylight } = setupKeylight()
 
-      await expect(
-        Effect.runPromise(Effect.flip(keylight.updateSettings(update)))
+      expect(
+        Effect.runPromise(
+          Effect.flip(keylight.updateSettings({ powerOnBrightness: 150 }))
+        )
       ).resolves.toBeInstanceOf(KeylightValidationError)
     })
 
     test('validates powerOnTemperature range', async () => {
-      const keylight = setup()
-      const update = { powerOnTemperature: 500 }
+      const { keylight } = setupKeylight()
 
-      await expect(
-        Effect.runPromise(Effect.flip(keylight.updateSettings(update)))
+      expect(
+        Effect.runPromise(
+          Effect.flip(keylight.updateSettings({ powerOnTemperature: 500 }))
+        )
       ).resolves.toBeInstanceOf(KeylightValidationError)
     })
   })
@@ -351,82 +282,80 @@ describe('Keylight', () => {
   describe('convenience methods', () => {
     describe('turnOn', () => {
       test('turns on the light', async () => {
-        const keylight = setup()
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 1, brightness: 50, temperature: 200 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual({
-              numberOfLights: 1,
-              lights: [{ on: 1 }],
-            })
-            return HttpResponse.json(mockResponse)
-          })
-        )
+        const { device, keylight } = setupKeylight({
+          lights: {
+            numberOfLights: 1,
+            lights: [{ on: 0, brightness: 50, temperature: 200 }],
+          },
+        })
 
         const result = await Effect.runPromise(keylight.turnOn())
 
-        expect(result).toEqual(mockResponse)
+        expect(result).toEqual({
+          numberOfLights: 1,
+          lights: [{ on: 1, brightness: 50, temperature: 200 }],
+        })
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: {
+            numberOfLights: 1,
+            lights: [{ on: 1 }],
+          },
+        })
       })
     })
 
     describe('turnOff', () => {
       test('turns off the light', async () => {
-        const keylight = setup()
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 0, brightness: 50, temperature: 200 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual({
-              numberOfLights: 1,
-              lights: [{ on: 0 }],
-            })
-            return HttpResponse.json(mockResponse)
-          })
-        )
+        const { device, keylight } = setupKeylight({
+          lights: {
+            numberOfLights: 1,
+            lights: [{ on: 1, brightness: 50, temperature: 200 }],
+          },
+        })
 
         const result = await Effect.runPromise(keylight.turnOff())
 
-        expect(result).toEqual(mockResponse)
+        expect(result).toEqual({
+          numberOfLights: 1,
+          lights: [{ on: 0, brightness: 50, temperature: 200 }],
+        })
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: {
+            numberOfLights: 1,
+            lights: [{ on: 0 }],
+          },
+        })
       })
     })
 
     describe('setBrightness', () => {
       test('sets brightness', async () => {
-        const keylight = setup()
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 1, brightness: 80, temperature: 200 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual({
-              numberOfLights: 1,
-              lights: [{ brightness: 80 }],
-            })
-            return HttpResponse.json(mockResponse)
-          })
-        )
+        const { device, keylight } = setupKeylight()
 
         const result = await Effect.runPromise(keylight.setBrightness(80))
 
-        expect(result).toEqual(mockResponse)
+        expect(result.lights[0]?.brightness).toBe(80)
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: {
+            numberOfLights: 1,
+            lights: [{ brightness: 80 }],
+          },
+        })
       })
 
       test('validates brightness range', async () => {
-        const keylight = setup()
+        const { keylight } = setupKeylight()
 
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setBrightness(-5)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setBrightness(150)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
       })
@@ -434,36 +363,30 @@ describe('Keylight', () => {
 
     describe('setTemperatureKelvin', () => {
       test('sets temperature in Kelvin', async () => {
-        const keylight = setup()
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 1, brightness: 50, temperature: 240 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual({
-              numberOfLights: 1,
-              lights: [{ temperature: 240 }],
-            })
-            return HttpResponse.json(mockResponse)
-          })
-        )
+        const { device, keylight } = setupKeylight()
 
         const result = await Effect.runPromise(
           keylight.setTemperatureKelvin(4000)
         )
 
-        expect(result).toEqual(mockResponse)
+        expect(result.lights[0]?.temperature).toBe(240)
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: {
+            numberOfLights: 1,
+            lights: [{ temperature: 240 }],
+          },
+        })
       })
 
       test('validates Kelvin range', async () => {
-        const keylight = setup()
+        const { keylight } = setupKeylight()
 
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setTemperatureKelvin(2000)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setTemperatureKelvin(8000)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
       })
@@ -471,34 +394,28 @@ describe('Keylight', () => {
 
     describe('setTemperature', () => {
       test('sets temperature in API format', async () => {
-        const keylight = setup()
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 1, brightness: 50, temperature: 200 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual({
-              numberOfLights: 1,
-              lights: [{ temperature: 200 }],
-            })
-            return HttpResponse.json(mockResponse)
-          })
-        )
+        const { device, keylight } = setupKeylight()
 
         const result = await Effect.runPromise(keylight.setTemperature(200))
 
-        expect(result).toEqual(mockResponse)
+        expect(result.lights[0]?.temperature).toBe(200)
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: {
+            numberOfLights: 1,
+            lights: [{ temperature: 200 }],
+          },
+        })
       })
 
       test('validates temperature range', async () => {
-        const keylight = setup()
+        const { keylight } = setupKeylight()
 
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setTemperature(100)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
-        await expect(
+        expect(
           Effect.runPromise(Effect.flip(keylight.setTemperature(500)))
         ).resolves.toBeInstanceOf(KeylightValidationError)
       })
@@ -506,22 +423,11 @@ describe('Keylight', () => {
 
     describe('setLight', () => {
       test('sets multiple properties at once', async () => {
-        const keylight = setup()
+        const { device, keylight } = setupKeylight()
         const update = {
           numberOfLights: 1,
-          lights: [{ on: 1, brightness: 75, temperature: 250 }],
+          lights: [{ on: 1 as const, brightness: 75, temperature: 250 }],
         }
-        const mockResponse: LightsStatus = {
-          numberOfLights: 1,
-          lights: [{ on: 1, brightness: 75, temperature: 250 }],
-        }
-
-        server.use(
-          http.put(`${baseUrl}/lights`, async ({ request }) => {
-            expect(await request.json()).toEqual(update)
-            return HttpResponse.json(mockResponse)
-          })
-        )
 
         const result = await Effect.runPromise(
           keylight.setLight({
@@ -531,7 +437,12 @@ describe('Keylight', () => {
           })
         )
 
-        expect(result).toEqual(mockResponse)
+        expect(result).toEqual(device.getState().lights)
+        expect(device.requests.at(-1)).toMatchObject({
+          method: 'PUT',
+          pathname: '/elgato/lights',
+          body: update,
+        })
       })
     })
   })
