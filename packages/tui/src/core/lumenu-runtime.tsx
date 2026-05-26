@@ -1,10 +1,9 @@
 import * as React from 'react'
-import { Effect, Layer, ManagedRuntime } from 'effect'
+import { Effect, ManagedRuntime } from 'effect'
 
-import { FetchHttpClient, type HttpClient } from '@lumenu/keylight'
 import { Storage } from '@lumenu/storage'
 
-type LumenuRequirements = Storage | HttpClient
+type LumenuRequirements = Storage
 
 interface LumenuRuntime {
   readonly runPromise: <A, E>(
@@ -14,7 +13,7 @@ interface LumenuRuntime {
 
 const LumenuRuntimeContext = React.createContext<LumenuRuntime | null>(null)
 
-export const lumenuLayer = Layer.merge(Storage.layer(), FetchHttpClient.layer)
+export const lumenuLayer = Storage.layer()
 
 export type LumenuManagedRuntime = ManagedRuntime.ManagedRuntime<
   LumenuRequirements,

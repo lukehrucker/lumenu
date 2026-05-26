@@ -4,30 +4,25 @@
  * @example
  * ```typescript
  * import { Effect } from 'effect'
- * import { FetchHttpClient, Keylight } from '@lumenu/keylight'
- * import type { HttpClient } from '@lumenu/keylight'
+ * import { Keylight } from '@lumenu/keylight'
  *
  * const keylight = Keylight.make('192.168.1.61')
- * const run = <A, E>(effect: Effect.Effect<A, E, HttpClient>) =>
- *   Effect.runPromise(effect.pipe(Effect.provide(FetchHttpClient.layer)))
  *
  * // Turn on and set to 50% brightness
- * await run(keylight.turnOn())
- * await run(keylight.setBrightness(50))
+ * await Effect.runPromise(keylight.turnOn())
+ * await Effect.runPromise(keylight.setBrightness(50))
  *
  * // Set temperature to 4000K
- * await run(keylight.setTemperatureKelvin(4000))
+ * await Effect.runPromise(keylight.setTemperatureKelvin(4000))
  *
  * // Get current status
- * const status = await run(keylight.getLights())
+ * const status = await Effect.runPromise(keylight.getLights())
  * console.log(status)
  * ```
  */
 
 export { Keylight, Temperature } from './keylight.js'
 export type { KeylightOperationError } from './keylight.js'
-export type { HttpResponse } from './http-client.js'
-export { HttpClient, FetchHttpClient } from './http-client.js'
 export {
   KeylightError,
   KeylightConnectionError,

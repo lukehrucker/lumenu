@@ -14,7 +14,8 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "msw": "^2.12.2"
   },
   "peerDependencies": {
     "typescript": "catalog:"
