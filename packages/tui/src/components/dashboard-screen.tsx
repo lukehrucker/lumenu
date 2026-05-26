@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useKeyboard, useRenderer } from '@opentui/react'
+import { Effect } from 'effect'
 
 import { Temperature } from '@lumenu/keylight'
 import type { DeviceRow } from '@lumenu/storage'
@@ -64,7 +65,11 @@ function formatTemperature(value: number | null) {
 function lastTemperatureKelvin(device: DeviceRow) {
   return device.lastTemperature === null
     ? null
-    : Temperature.apiToKelvin(device.lastTemperature)
+    : Effect.runSync(
+        Temperature.apiToKelvin(device.lastTemperature).pipe(
+          Effect.catchAll(() => Effect.succeed(null))
+        )
+      )
 }
 
 function bar(value: number | null, min: number, max: number, width = 12) {

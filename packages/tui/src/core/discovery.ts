@@ -21,6 +21,14 @@ export interface DiscoveredDevice {
   error?: string
 }
 
+function powerToStorage(on: boolean | undefined): 0 | 1 | undefined {
+  if (on === undefined) {
+    return undefined
+  }
+
+  return on ? 1 : 0
+}
+
 export function probeHost(host: string) {
   const keylight = Keylight.make(host)
 
@@ -59,7 +67,7 @@ export function saveDiscoveredDevices(devices: DiscoveredDevice[]) {
         productName: device.info.productName,
         firmwareVersion: device.info.firmwareVersion,
         firmwareBuildNumber: device.info.firmwareBuildNumber,
-        lastOn: device.light?.on,
+        lastOn: powerToStorage(device.light?.on),
         lastBrightness: device.light?.brightness,
         lastTemperature: device.light?.temperature,
         lastSeenAt: new Date().toISOString(),

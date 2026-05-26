@@ -1,34 +1,56 @@
+import { Context, Effect, Layer } from 'effect'
+
 import type {
   AccessoryInfo,
   AccessoryInfoUpdate,
-  LightsStatus,
-  LightUpdate,
-  LightsUpdate,
   LightSettings,
   LightSettingsUpdate,
+  LightsStatus,
+  LightsUpdate,
+  LightUpdate,
 } from './types.js'
-import { Effect } from 'effect'
-
 import {
-  KeylightConnectionError,
   KeylightBadRequestError,
+  KeylightConnectionError,
+  KeylightDecodeError,
+  KeylightHttpError,
   KeylightValidationError,
 } from './errors.js'
 import { Temperature } from './temperature.js'
-
-interface HttpResponse<T = unknown> {
-  ok: boolean
-  status: number
-  data: T
-}
+import {
+  makeKeylightService,
+  type KeylightService,
+  type KeylightTransportOptions,
+} from './transport.js'
 
 export type KeylightOperationError =
   | KeylightConnectionError
+  | KeylightHttpError
   | KeylightBadRequestError
+  | KeylightDecodeError
   | KeylightValidationError
 
+export class KeylightClient extends Context.Tag('@lumenu/keylight/Client')<
+  KeylightClient,
+  KeylightService
+>() {
+  static readonly layer = Layer.succeed(KeylightClient, makeKeylightService())
+
+  static layerWith(
+    options: KeylightTransportOptions
+  ): Layer.Layer<KeylightClient> {
+    return Layer.succeed(KeylightClient, makeKeylightService(options))
+  }
+}
+
+const defaultService = makeKeylightService()
+
 /**
- * Elgato Key Light client
+ * Host-bound Elgato Key Light client.
+ *
+ * The host-bound class is the ergonomic edge API. Internally it delegates to
+ * the same service implementation exposed by `KeylightClient.layer`, so tests
+ * and applications can use layers when they want dependency injection.
  *
  * @example
  * ```typescript
@@ -37,18 +59,17 @@ export type KeylightOperationError =
  * ```
  */
 export class Keylight {
-  private readonly baseUrl: string
-
   /**
-   * Create a new Keylight client
-   * @param ip IP address of the Keylight device
+   * Create a new Keylight client.
+   * @param host IP address or hostname of the Keylight device
    */
-  constructor(ip: string) {
-    this.baseUrl = `http://${ip}:9123/elgato`
-  }
+  constructor(
+    readonly host: string,
+    private readonly service: KeylightService = defaultService
+  ) {}
 
   /**
-   * Create a new Keylight client
+   * Create a new Keylight client.
    * @param host IP address or hostname of the Keylight device
    */
   static make(host: string): Keylight {
@@ -56,61 +77,57 @@ export class Keylight {
   }
 
   /**
-   * Flash the light to identify the device
+   * Create a host-bound client from a service implementation.
+   * @param host IP address or hostname of the Keylight device
+   * @param service Keylight service implementation
+   */
+  static fromService(host: string, service: KeylightService): Keylight {
+    return new Keylight(host, service)
+  }
+
+  /**
+   * Flash the light to identify the device.
    */
   identify(): Effect.Effect<void, KeylightOperationError> {
-    return this.request('/identify', {
-      method: 'POST',
-      expectJson: false,
-    }).pipe(Effect.asVoid)
+    return this.service.identify(this.host)
   }
 
   /**
-   * Get device accessory information
+   * Get device accessory information.
    */
   getAccessoryInfo(): Effect.Effect<AccessoryInfo, KeylightOperationError> {
-    return this.request('/accessory-info', { method: 'GET' })
+    return this.service.getAccessoryInfo(this.host)
   }
 
   /**
-   * Update device accessory information
+   * Update device accessory information.
    * @param info Partial accessory info to update
    */
   updateAccessoryInfo(
     info: AccessoryInfoUpdate
   ): Effect.Effect<AccessoryInfo, KeylightOperationError> {
-    return this.request('/accessory-info', {
-      method: 'PUT',
-      body: info,
-    })
+    return this.service.updateAccessoryInfo(this.host, info)
   }
 
   /**
-   * Get current lights status
+   * Get current lights status.
    */
   getLights(): Effect.Effect<LightsStatus, KeylightOperationError> {
-    return this.request('/lights', { method: 'GET' })
+    return this.service.getLights(this.host)
   }
 
   /**
-   * Update lights status
+   * Update lights status.
    * @param lights Lights update configuration
    */
   updateLights(
     lights: LightsUpdate
   ): Effect.Effect<LightsStatus, KeylightOperationError> {
-    return this.validateLights(lights).pipe(
-      Effect.flatMap(() =>
-        this.request('/lights', {
-          method: 'PUT',
-          body: lights,
-        })
-      )
-    )
+    return this.service.updateLights(this.host, lights)
   }
 
   /**
-   * Alias for updating lights status.
+   * Alias for updating the first light.
    * @param light Light update configuration
    */
   setLights(
@@ -123,45 +140,38 @@ export class Keylight {
   }
 
   /**
-   * Get light settings
+   * Get light settings.
    */
   getSettings(): Effect.Effect<LightSettings, KeylightOperationError> {
-    return this.request('/lights/settings', { method: 'GET' })
+    return this.service.getSettings(this.host)
   }
 
   /**
-   * Update light settings
+   * Update light settings.
    * @param settings Partial settings to update
    */
   updateSettings(
     settings: LightSettingsUpdate
   ): Effect.Effect<LightSettings, KeylightOperationError> {
-    return this.validateSettings(settings).pipe(
-      Effect.flatMap(() =>
-        this.request('/lights/settings', {
-          method: 'PUT',
-          body: settings,
-        })
-      )
-    )
+    return this.service.updateSettings(this.host, settings)
   }
 
   /**
-   * Turn on the light (preserves current brightness and temperature)
+   * Turn on the light while preserving current brightness and temperature.
    */
   turnOn(): Effect.Effect<LightsStatus, KeylightOperationError> {
-    return this.setLights({ on: 1 })
+    return this.setLights({ on: true })
   }
 
   /**
-   * Turn off the light (preserves current brightness and temperature)
+   * Turn off the light while preserving current brightness and temperature.
    */
   turnOff(): Effect.Effect<LightsStatus, KeylightOperationError> {
-    return this.setLights({ on: 0 })
+    return this.setLights({ on: false })
   }
 
   /**
-   * Set brightness percentage (0-100)
+   * Set brightness percentage.
    * @param brightness Brightness percentage (0-100)
    */
   setBrightness(
@@ -171,22 +181,19 @@ export class Keylight {
   }
 
   /**
-   * Set temperature in Kelvin (2900-7000)
+   * Set temperature in Kelvin.
    * @param kelvin Temperature in Kelvin (2900-7000)
    */
   setTemperatureKelvin(
     kelvin: number
   ): Effect.Effect<LightsStatus, KeylightOperationError> {
-    return Effect.try({
-      try: () => Temperature.kelvinToApi(kelvin),
-      catch: (error: unknown) => error as KeylightValidationError,
-    }).pipe(
-      Effect.flatMap((temperature: number) => this.setTemperature(temperature))
+    return Temperature.kelvinToApi(kelvin).pipe(
+      Effect.flatMap((temperature) => this.setTemperature(temperature))
     )
   }
 
   /**
-   * Set temperature in API format (143-344)
+   * Set temperature in API format.
    * @param temperature Temperature in API format (143-344)
    */
   setTemperature(
@@ -196,134 +203,12 @@ export class Keylight {
   }
 
   /**
-   * Set multiple properties at once
+   * Set multiple first-light properties at once.
    * @param options Light properties to set
    */
   setLight(
     options: LightUpdate
   ): Effect.Effect<LightsStatus, KeylightOperationError> {
     return this.setLights(options)
-  }
-
-  private request<T>(
-    endpoint: string,
-    options: {
-      method: 'GET' | 'PUT' | 'POST'
-      body?: unknown
-      expectJson?: boolean
-    }
-  ): Effect.Effect<T, KeylightConnectionError | KeylightBadRequestError> {
-    const url = `${this.baseUrl}${endpoint}`
-
-    return Effect.gen(function* () {
-      const response = yield* Keylight.fetchJson<T>(url, options)
-
-      if (!response.ok) {
-        return yield* Effect.fail(new KeylightBadRequestError(endpoint))
-      }
-
-      return response.data
-    })
-  }
-
-  private static fetchJson<T>(
-    url: string,
-    options: {
-      method: 'GET' | 'PUT' | 'POST'
-      body?: unknown
-      expectJson?: boolean
-    }
-  ): Effect.Effect<HttpResponse<T>, KeylightConnectionError> {
-    return Effect.tryPromise({
-      try: async () => {
-        const hasBody = options.body !== undefined
-        const response = await fetch(url, {
-          method: options.method,
-          headers: {
-            Accept: 'application/json',
-            ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
-          },
-          ...(hasBody ? { body: JSON.stringify(options.body) } : {}),
-        })
-
-        const data =
-          response.ok && options.expectJson !== false
-            ? ((await response.json()) as T)
-            : (null as T)
-
-        return {
-          ok: response.ok,
-          status: response.status,
-          data,
-        }
-      },
-      catch: (cause) => new KeylightConnectionError(url, cause as Error),
-    })
-  }
-
-  private validateLights(
-    lights: LightsUpdate
-  ): Effect.Effect<void, KeylightValidationError> {
-    for (const light of lights.lights) {
-      if (light.brightness !== undefined) {
-        const result = this.validateRange('brightness', light.brightness)
-        if (result) {
-          return Effect.fail(result)
-        }
-      }
-
-      if (light.temperature !== undefined) {
-        const result = this.validateRange('temperature', light.temperature)
-        if (result) {
-          return Effect.fail(result)
-        }
-      }
-    }
-
-    return Effect.void
-  }
-
-  private validateSettings(
-    settings: LightSettingsUpdate
-  ): Effect.Effect<void, KeylightValidationError> {
-    if (settings.powerOnBrightness !== undefined) {
-      const result = this.validateRange(
-        'powerOnBrightness',
-        settings.powerOnBrightness
-      )
-      if (result) {
-        return Effect.fail(result)
-      }
-    }
-
-    if (settings.powerOnTemperature !== undefined) {
-      const result = this.validateRange(
-        'powerOnTemperature',
-        settings.powerOnTemperature
-      )
-      if (result) {
-        return Effect.fail(result)
-      }
-    }
-
-    return Effect.void
-  }
-
-  private fieldRanges = {
-    brightness: { min: 0, max: 100 },
-    temperature: { min: 143, max: 344 },
-    powerOnBrightness: { min: 0, max: 100 },
-    powerOnTemperature: { min: 143, max: 344 },
-  }
-
-  private validateRange(
-    field: keyof typeof this.fieldRanges,
-    value: number
-  ): KeylightValidationError | undefined {
-    const { min, max } = this.fieldRanges[field]
-
-    if (value < min || value > max) {
-      return new KeylightValidationError(field, value, min, max)
-    }
   }
 }
