@@ -49,13 +49,13 @@ const status = await Effect.runPromise(keylight.getLights())
 console.log(status)
 // {
 //   numberOfLights: 1,
-//   lights: [{ on: 1, brightness: 50, temperature: 240 }]
+//   lights: [{ on: true, brightness: 50, temperature: 240 }]
 // }
 
 // Update multiple properties at once
 await Effect.runPromise(
   keylight.setLight({
-    on: 1,
+    on: true,
     brightness: 75,
     temperature: 250,
   })
@@ -90,13 +90,14 @@ await Effect.runPromise(keylight.identify())
 The Key Light uses a custom temperature format internally. The client provides utilities for conversion:
 
 ```typescript
+import { Effect } from 'effect'
 import { Temperature } from '@lumenu/keylight'
 
 // Convert Kelvin to API format
-const apiTemp = Temperature.kelvinToApi(4000) // 240
+const apiTemp = await Effect.runPromise(Temperature.kelvinToApi(4000)) // 240
 
 // Convert API format to Kelvin
-const kelvin = Temperature.apiToKelvin(240) // 4000
+const kelvin = await Effect.runPromise(Temperature.apiToKelvin(240)) // 4000
 ```
 
 ## API Reference

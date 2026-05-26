@@ -109,7 +109,7 @@ describe('Keylight', () => {
     test('returns lights status', async () => {
       const lights = {
         numberOfLights: 1,
-        lights: [{ on: 1 as const, brightness: 50, temperature: 200 }],
+        lights: [{ on: true, brightness: 50, temperature: 200 }],
       }
       const { keylight } = setupKeylight({ lights })
 
@@ -124,7 +124,7 @@ describe('Keylight', () => {
       const { device, keylight } = setupKeylight()
       const update = {
         numberOfLights: 1,
-        lights: [{ on: 1 as const, brightness: 75, temperature: 200 }],
+        lights: [{ on: true, brightness: 75, temperature: 200 }],
       }
 
       const result = await Effect.runPromise(keylight.updateLights(update))
@@ -133,7 +133,10 @@ describe('Keylight', () => {
       expect(device.requests.at(-1)).toMatchObject({
         method: 'PUT',
         pathname: '/elgato/lights',
-        body: update,
+        body: {
+          numberOfLights: 1,
+          lights: [{ on: 1, brightness: 75, temperature: 200 }],
+        },
       })
     })
 
@@ -222,7 +225,7 @@ describe('Keylight', () => {
         const { device, keylight } = setupKeylight({
           lights: {
             numberOfLights: 1,
-            lights: [{ on: 0, brightness: 50, temperature: 200 }],
+            lights: [{ on: false, brightness: 50, temperature: 200 }],
           },
         })
 
@@ -230,7 +233,7 @@ describe('Keylight', () => {
 
         expect(result).toEqual({
           numberOfLights: 1,
-          lights: [{ on: 1, brightness: 50, temperature: 200 }],
+          lights: [{ on: true, brightness: 50, temperature: 200 }],
         })
         expect(device.requests.at(-1)).toMatchObject({
           method: 'PUT',
@@ -248,7 +251,7 @@ describe('Keylight', () => {
         const { device, keylight } = setupKeylight({
           lights: {
             numberOfLights: 1,
-            lights: [{ on: 1, brightness: 50, temperature: 200 }],
+            lights: [{ on: true, brightness: 50, temperature: 200 }],
           },
         })
 
@@ -256,7 +259,7 @@ describe('Keylight', () => {
 
         expect(result).toEqual({
           numberOfLights: 1,
-          lights: [{ on: 0, brightness: 50, temperature: 200 }],
+          lights: [{ on: false, brightness: 50, temperature: 200 }],
         })
         expect(device.requests.at(-1)).toMatchObject({
           method: 'PUT',
@@ -363,12 +366,12 @@ describe('Keylight', () => {
         const { device, keylight } = setupKeylight()
         const update = {
           numberOfLights: 1,
-          lights: [{ on: 1 as const, brightness: 75, temperature: 250 }],
+          lights: [{ on: 1, brightness: 75, temperature: 250 }],
         }
 
         const result = await Effect.runPromise(
           keylight.setLight({
-            on: 1,
+            on: true,
             brightness: 75,
             temperature: 250,
           })

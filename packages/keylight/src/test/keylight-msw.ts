@@ -1,5 +1,14 @@
 import type { HttpHandler } from 'msw'
-import type { AccessoryInfo, LightSettings, LightsStatus } from '../types.js'
+import type {
+  AccessoryInfo,
+  Light,
+  LightSettings,
+  LightsStatus,
+} from '../types.js'
+import type {
+  LightsStatus as WireLightsStatus,
+  LightsUpdate as WireLightsUpdate,
+} from '../generated/types.gen.js'
 import { afterAll, afterEach, beforeAll } from 'bun:test'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -37,6 +46,11 @@ interface KeylightMockDevice {
 
 type HttpMethod = 'GET' | 'PUT' | 'POST'
 
+interface PublicLightsUpdate {
+  numberOfLights?: number
+  lights?: Partial<Light>[]
+}
+
 type KeylightEndpoint =
   | '/identify'
   | '/accessory-info'
@@ -55,7 +69,7 @@ const defaultAccessoryInfo: AccessoryInfo = {
 
 const defaultLights: LightsStatus = {
   numberOfLights: 1,
-  lights: [{ on: 0, brightness: 25, temperature: 166 }],
+  lights: [{ on: false, brightness: 25, temperature: 166 }],
 }
 
 const defaultSettings: LightSettings = {
@@ -128,6 +142,47 @@ function createInitialState(
   }
 }
 
+function powerToWire(on: boolean): 0 | 1 {
+  return on ? 1 : 0
+}
+
+function powerFromWire(on: 0 | 1 | undefined): boolean | undefined {
+  if (on === undefined) {
+    return undefined
+  }
+
+  return on === 1
+}
+
+function toWireLights(lights: LightsStatus): WireLightsStatus {
+  return {
+    numberOfLights: lights.numberOfLights,
+    lights: lights.lights.map((light) => ({
+      ...light,
+      on: powerToWire(light.on),
+    })),
+  }
+}
+
+function toPublicLightsUpdate(update: WireLightsUpdate): PublicLightsUpdate {
+  return {
+    numberOfLights: update.numberOfLights,
+    lights: update.lights.map((light) => {
+      const on = powerFromWire(light.on)
+
+      return {
+        ...(on === undefined ? {} : { on }),
+        ...(light.brightness === undefined
+          ? {}
+          : { brightness: light.brightness }),
+        ...(light.temperature === undefined
+          ? {}
+          : { temperature: light.temperature }),
+      }
+    }),
+  }
+}
+
 function createKeylightMockDevice(
   options: CreateKeylightMockDeviceOptions = {}
 ): KeylightMockDevice {
@@ -159,25 +214,22 @@ function createKeylightMockDevice(
 
     http.get(`${baseUrl}/lights`, async ({ request }) => {
       await recordRequest(requests, request)
-      return HttpResponse.json(state.lights)
+      return HttpResponse.json(toWireLights(state.lights))
     }),
 
     http.put(`${baseUrl}/lights`, async ({ request }) => {
-      const body = (await recordRequest(
-        requests,
-        request
-      )) as Partial<LightsStatus>
-      const updates = body.lights ?? []
+      const body = (await recordRequest(requests, request)) as WireLightsUpdate
+      const update = toPublicLightsUpdate(body)
 
       state.lights = {
-        numberOfLights: body.numberOfLights ?? state.lights.numberOfLights,
+        numberOfLights: update.numberOfLights ?? state.lights.numberOfLights,
         lights: state.lights.lights.map((light, index) => ({
           ...light,
-          ...updates[index],
+          ...update.lights?.[index],
         })),
       }
 
-      return HttpResponse.json(state.lights)
+      return HttpResponse.json(toWireLights(state.lights))
     }),
 
     http.get(`${baseUrl}/lights/settings`, async ({ request }) => {
