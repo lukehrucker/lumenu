@@ -10,7 +10,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "openapi:gen": "bun --filter @lumenu/keylight openapi:gen",
-    "prepare": "lefthook install"
+    "prepare": "./scripts/prepare-effect.sh && lefthook install"
   },
   "devDependencies": {
     "@hey-api/client-fetch": "0.13.1",
