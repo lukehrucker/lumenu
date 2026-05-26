@@ -84,26 +84,113 @@ scoping.
 
 ## Main Dashboard
 
-- The primary layout should be a single dashboard containing one card per saved
-  light.
-- Each light card should show high-level status and common inline controls.
-- Each light card should use a compact three-row hierarchy:
-  - Row 1: display name, reachability, and power state.
-  - Row 2: brightness and temperature summary using readable bar-like controls.
-  - Row 3: focusable control targets.
-- Inline card controls should include power, brightness, temperature, refresh,
-  and details.
+- The primary layout should be a fader-board dashboard optimized for comparing
+  and adjusting multiple lights at once.
+- Saved lights should appear as horizontal columns, with common controls as rows.
+- The dashboard should use a grid-like hierarchy:
+  - Header row: saved light display names.
+  - Power row: current power state for each light.
+  - Brightness row: value plus readable bar-like level display.
+  - Temperature row: value plus readable bar-like level display.
+  - Status row: reachability/runtime state.
+- The selected target should be a grid cell, not a whole light card plus nested
+  control target.
+- The initial focusable dashboard cells should be power, brightness, and
+  temperature for each saved light.
+- Refresh, identify, and details should be shortcut-driven actions for the
+  selected light rather than always-rendered per-light control buttons.
 - Detailed metadata and less-common actions should open in a modal for the
   selected light instead of living in a second dashboard pane.
-- The dashboard should remain usable as a single-column card list on narrow
-  terminals.
-- The dashboard card list should be scrollable from the first implementation;
-  moving selection should keep the selected card visible.
+- The dashboard should remain usable on narrow terminals by falling back to a
+  compact list/card representation or by showing a horizontally scrollable
+  window of light columns.
+- The fader board should be horizontally scrollable from the first implementation
+  if all saved lights do not fit; moving selection should keep the selected
+  light column visible.
 - Initial dashboard control scope is per-light control only.
-- Each dashboard card should track a runtime status: `loading`, `online`,
+- Each saved light should track a runtime status: `loading`, `online`,
   `offline`, or `updating`.
 - Multi-light group control, named groups, and preset scenes are out of scope for
   the first version.
+
+### Dashboard Mockups
+
+Default fader-board layout:
+
+```text
+Lumenu Faders                                      Cached state shown
+
+             Desk Key       Fill          Hair
++-------------------------------------------------------------+
+| Power       ON            OFF           ?                   |
+| Bright      <72%>         0%            --                  |
+|             [#######---]  [----------]  [----------]        |
+| Temp        4200K         3900K         ----                |
+|             [######----]  [#####-----]  [----------]        |
+| Status      online        online        offline             |
++-------------------------------------------------------------+
+
+Selected: Desk Key / Brightness
+enter edit   h/l light   j/k row   r refresh   d details   a add   q quit
+```
+
+Live adjustment state:
+
+```text
+Lumenu Faders                                      Editing brightness
+
+             Desk Key       Fill          Hair
++-------------------------------------------------------------+
+| Power       ON            OFF           ?                   |
+| Bright      <75%>         0%            --                  |
+|             [########--]  [----------]  [----------]        |
+| Temp        4200K         3900K         ----                |
+|             [######----]  [#####-----]  [----------]        |
+| Status      updating      online        offline             |
++-------------------------------------------------------------+
+
+Editing: Desk Key / Brightness
+h/l adjust 5   H/L adjust 10   enter done   esc close   q quit
+```
+
+Horizontally scrolled layout for many lights:
+
+```text
+Lumenu Faders                         Showing lights 3-5 of 8
+
+             Hair          Shelf         Window
++-------------------------------------------------------------+
+| Power       ON            ON            OFF                 |
+| Bright      45%           <60%>         0%                  |
+|             [#####-----]  [######----]  [----------]        |
+| Temp        5000K         4400K         3900K               |
+|             [########--]  [######----]  [#####-----]        |
+| Status      online        online        online              |
++-------------------------------------------------------------+
+
+Selected: Shelf / Brightness
+h/l light   j/k row   r refresh   d details   a add   q quit
+```
+
+Narrow-terminal fallback:
+
+```text
+Lumenu Faders
+
+> Desk Key      online ON
+  Bright <72%>  [#######---]
+  Temp   4200K  [######----]
+
+  Fill          online OFF
+  Bright 0%     [----------]
+  Temp   3900K  [#####-----]
+
+  Hair          offline ?
+  Bright --     [----------]
+  Temp   ----   [----------]
+
+j/k row   h/l light   enter edit   r refresh   d details   q quit
+```
 
 ## Device Controls
 
@@ -161,12 +248,17 @@ scoping.
 ## Navigation
 
 - The TUI should use hybrid arrow-key and Vim-style navigation.
-- On the dashboard, `j`/`k` or arrows should move between light cards.
-- The dashboard should use a two-level focus model: one selected card, plus one
-  focused control within that card.
-- Tab should cycle controls within the selected card.
+- On the dashboard, `h`/`l` or left/right should move between light columns.
+- On the dashboard, `j`/`k` or up/down should move between control rows.
+- The dashboard should use a single grid-cell focus model: selected light column
+  plus selected control row.
+- Tab can cycle focusable dashboard rows for users who prefer tab navigation, but
+  grid navigation is the primary model.
 - When brightness or temperature is focused, `h`/`l` should adjust the value.
 - Enter should activate or open the selected item.
+- Enter on power should toggle the selected light.
+- Enter on brightness or temperature may enter an adjustment mode if needed, but
+  direct `h`/`l` adjustment remains the preferred live-control interaction.
 - Space should toggle selection where applicable.
 - Esc should go back or close overlays.
 - `?` should open help.
