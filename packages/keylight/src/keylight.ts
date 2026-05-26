@@ -266,24 +266,14 @@ export class Keylight {
   ): Effect.Effect<void, KeylightValidationError> {
     for (const light of lights.lights) {
       if (light.brightness !== undefined) {
-        const result = this.validateRange(
-          'brightness',
-          light.brightness,
-          0,
-          100
-        )
+        const result = this.validateRange('brightness', light.brightness)
         if (result) {
           return Effect.fail(result)
         }
       }
 
       if (light.temperature !== undefined) {
-        const result = this.validateRange(
-          'temperature',
-          light.temperature,
-          143,
-          344
-        )
+        const result = this.validateRange('temperature', light.temperature)
         if (result) {
           return Effect.fail(result)
         }
@@ -299,9 +289,7 @@ export class Keylight {
     if (settings.powerOnBrightness !== undefined) {
       const result = this.validateRange(
         'powerOnBrightness',
-        settings.powerOnBrightness,
-        0,
-        100
+        settings.powerOnBrightness
       )
       if (result) {
         return Effect.fail(result)
@@ -311,9 +299,7 @@ export class Keylight {
     if (settings.powerOnTemperature !== undefined) {
       const result = this.validateRange(
         'powerOnTemperature',
-        settings.powerOnTemperature,
-        143,
-        344
+        settings.powerOnTemperature
       )
       if (result) {
         return Effect.fail(result)
@@ -323,12 +309,19 @@ export class Keylight {
     return Effect.void
   }
 
+  private fieldRanges = {
+    brightness: { min: 0, max: 100 },
+    temperature: { min: 143, max: 344 },
+    powerOnBrightness: { min: 0, max: 100 },
+    powerOnTemperature: { min: 143, max: 344 },
+  }
+
   private validateRange(
-    field: string,
-    value: number,
-    min: number,
-    max: number
+    field: keyof typeof this.fieldRanges,
+    value: number
   ): KeylightValidationError | undefined {
+    const { min, max } = this.fieldRanges[field]
+
     if (value < min || value > max) {
       return new KeylightValidationError(field, value, min, max)
     }
