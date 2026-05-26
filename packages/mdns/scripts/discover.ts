@@ -1,4 +1,4 @@
-import { Mdns } from '../src/index.js'
+import { mDNS } from '../src/index.js'
 import { Effect } from 'effect'
 
 /**
@@ -14,7 +14,7 @@ const DISCOVERY_TIMEOUT = 5000 // 5 seconds
 const SERVICE_TYPE = 'elg'
 
 const ips = await Effect.runPromise(
-  Mdns.discover({
+  mDNS.discover({
     serviceType: SERVICE_TYPE,
     timeout: DISCOVERY_TIMEOUT,
   })

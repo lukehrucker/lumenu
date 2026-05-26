@@ -2,11 +2,8 @@ import { Effect } from 'effect'
 
 import type { AccessoryInfo, Light } from '@lumenu/keylight'
 import { Keylight } from '@lumenu/keylight'
-import { Mdns } from '@lumenu/mdns'
 import type { DeviceInput } from '@lumenu/storage'
 import { Storage } from '@lumenu/storage'
-
-const serviceType = 'elg'
 
 export type DiscoveryStatus =
   | 'discovered'
@@ -22,10 +19,6 @@ export interface DiscoveredDevice {
   info?: AccessoryInfo
   light?: Light
   error?: string
-}
-
-export function discoverHosts() {
-  return Mdns.discover({ serviceType })
 }
 
 export function probeHost(host: string) {

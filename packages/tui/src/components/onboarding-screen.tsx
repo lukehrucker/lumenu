@@ -2,16 +2,17 @@ import * as React from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useKeyboard, useRenderer } from '@opentui/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Effect } from 'effect'
 
 import { StatusBadge } from './status-badge.js'
 import {
   type DiscoveredDevice,
-  discoverHosts,
   identifyHost,
   probeHost,
   saveDiscoveredDevices,
 } from '../core/discovery.js'
 import { useLumenuRuntime } from '../core/lumenu-runtime.js'
+import { mDNS } from '@lumenu/mdns'
 
 interface OnboardingScreenProps {
   onSaved: () => void
@@ -31,7 +32,9 @@ export function OnboardingScreen({ onSaved }: OnboardingScreenProps) {
     setSelectedIndex(0)
 
     try {
-      const hosts = await runtime.runPromise(discoverHosts())
+      const hosts = await Effect.runPromise(
+        mDNS.discover({ serviceType: 'elg' })
+      )
       setDevices(
         hosts.map((host) => ({
           host,
@@ -48,7 +51,7 @@ export function OnboardingScreen({ onSaved }: OnboardingScreenProps) {
       await Promise.all(
         hosts.map(async (host) => {
           try {
-            const probed = await runtime.runPromise(probeHost(host))
+            const probed = await Effect.runPromise(probeHost(host))
             setDevices((current) =>
               current.map((device) => (device.host === host ? probed : device))
             )
@@ -72,7 +75,7 @@ export function OnboardingScreen({ onSaved }: OnboardingScreenProps) {
     } catch (error) {
       setMessage(`Discovery failed: ${String(error)}`)
     }
-  }, [runtime])
+  }, [])
 
   React.useEffect(() => {
     void scan()
