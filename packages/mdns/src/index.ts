@@ -2,60 +2,120 @@ import bonjour = require('bonjour')
 import type { RemoteService } from 'bonjour'
 import { Data, Effect } from 'effect'
 
-export namespace Mdns {
-  export class DiscoveryError extends Data.TaggedError('DiscoveryError')<{
-    readonly cause: unknown
-  }> {}
+import { getReachableIPv4Addresses } from './utils.js'
 
-  const isLocalhost = (address: string) =>
-    address === '127.0.0.1' || address === '0.0.0.0' || address === '::1'
+export class DiscoveryError extends Data.TaggedError('DiscoveryError')<{
+  readonly cause: unknown
+}> {}
 
-  const isIPv6 = (address: string) => address.includes(':')
+export class InvalidDiscoveryOptions extends Data.TaggedError(
+  'InvalidDiscoveryOptions'
+)<{
+  readonly message: string
+}> {}
 
-  export function discover({
+export type mDNSError = DiscoveryError | InvalidDiscoveryOptions
+
+export interface DiscoveryOptions {
+  readonly serviceType: string
+  readonly timeout?: number
+}
+
+interface ValidatedDiscoveryOptions {
+  readonly serviceType: string
+  readonly timeout: number
+}
+
+export namespace mDNS {
+  const defaultDiscoveryTimeout = 5000
+
+  const validateDiscoveryOptions = (
+    options: DiscoveryOptions
+  ): Effect.Effect<ValidatedDiscoveryOptions, InvalidDiscoveryOptions> => {
+    const timeout = options.timeout ?? defaultDiscoveryTimeout
+
+    if (options.serviceType.trim().length === 0) {
+      return Effect.fail(
+        new InvalidDiscoveryOptions({
+          message: 'serviceType must not be empty',
+        })
+      )
+    }
+
+    if (!Number.isFinite(timeout) || timeout <= 0) {
+      return Effect.fail(
+        new InvalidDiscoveryOptions({
+          message: 'timeout must be a positive number of milliseconds',
+        })
+      )
+    }
+
+    return Effect.succeed({
+      serviceType: options.serviceType,
+      timeout,
+    })
+  }
+
+  const discoverWithBonjour = ({
     serviceType,
-    timeout = 5000,
-  }: {
-    serviceType: string
-    timeout?: number
-  }): Effect.Effect<string[], DiscoveryError> {
-    return Effect.async<string[], DiscoveryError>((resume) => {
+    timeout,
+  }: ValidatedDiscoveryOptions): Effect.Effect<string[], DiscoveryError> =>
+    Effect.async<string[], DiscoveryError>((resume) => {
       try {
         const bonjourInstance = bonjour()
         const browser = bonjourInstance.find({ type: serviceType })
-
         const discoveredIPs = new Set<string>()
 
-        browser.on('up', (service: RemoteService) => {
-          if (service.addresses && service.addresses.length > 0) {
-            for (const address of service.addresses) {
-              if (!isIPv6(address) && !isLocalhost(address)) {
-                discoveredIPs.add(address)
-              }
-            }
-          } else if (service.referer?.address) {
-            const address = service.referer.address
-            if (!isIPv6(address) && !isLocalhost(address)) {
-              discoveredIPs.add(address)
-            }
+        let cleanedUp = false
+        let completed = false
+        let timer: ReturnType<typeof setTimeout>
+
+        const cleanup = () => {
+          if (cleanedUp) {
+            return
           }
-        })
 
-        const timer = setTimeout(() => {
-          browser.stop()
-          bonjourInstance.destroy()
-          resume(Effect.succeed(Array.from(discoveredIPs)))
-        }, timeout)
-
-        return Effect.sync(() => {
+          cleanedUp = true
           clearTimeout(timer)
           browser.stop()
           bonjourInstance.destroy()
+        }
+
+        const complete = (effect: Effect.Effect<string[], DiscoveryError>) => {
+          if (completed) {
+            return
+          }
+
+          completed = true
+          resume(effect)
+        }
+
+        browser.on('up', (service: RemoteService) => {
+          for (const address of getReachableIPv4Addresses(service)) {
+            discoveredIPs.add(address)
+          }
         })
+
+        timer = setTimeout(() => {
+          try {
+            cleanup()
+            complete(Effect.succeed(Array.from(discoveredIPs)))
+          } catch (cause) {
+            complete(Effect.fail(new DiscoveryError({ cause })))
+          }
+        }, timeout)
+
+        return Effect.sync(cleanup)
       } catch (cause) {
         resume(Effect.fail(new DiscoveryError({ cause })))
         return Effect.void
       }
     })
-  }
+
+  export const discover = Effect.fn('mDNS.discover')(function* (
+    options: DiscoveryOptions
+  ) {
+    const validated = yield* validateDiscoveryOptions(options)
+    return yield* discoverWithBonjour(validated)
+  })
 }
