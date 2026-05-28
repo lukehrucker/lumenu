@@ -5,7 +5,7 @@
 **Lumenu** is a monorepo for controlling Elgato Key Lights, containing:
 
 - `packages/keylight` - TypeScript API client library
-- `packages/ui` - Desktop GUI (Tauri + React 19 + Vite + Tailwind 4)
+- `packages/ui` - React 19 + Vite + Tailwind 4 UI
 - `packages/tui` - Terminal UI (OpenTUI + React)
 - `packages/mdns` - mDNS service discovery (stub)
 
@@ -34,15 +34,13 @@ bun test keylight.test.ts  # Run specific test file
 bun test --watch         # Watch mode
 ```
 
-**ui (Desktop app):**
+**ui (React app):**
 
 ```bash
 cd packages/ui
 bun run dev              # Start dev server
 bun run build            # Type check + build
 bun run preview          # Preview production build
-bun run tauri dev        # Run Tauri dev mode
-bun run tauri build      # Build Tauri app
 ```
 
 **tui (Terminal app):**

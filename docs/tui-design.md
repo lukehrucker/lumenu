@@ -10,7 +10,7 @@ scoping.
   Key Lights.
 - Use mDNS discovery for onboarding and later device additions.
 - Persist saved lights locally so the TUI starts quickly after first setup.
-- Share persistence with the future desktop app.
+- Share persistence with other Lumenu interfaces.
 - Keep the interface keyboard-first and readable in terminal constraints.
 
 ## Repository Context
@@ -32,8 +32,8 @@ scoping.
 - If no saved devices exist, the app should enter onboarding automatically.
 - Persistence should live in a new shared package, `@lumenu/storage`.
 - `@lumenu/storage` should use SQLite, Drizzle, and Bun's SQLite driver.
-- The shared storage package exists so both the TUI and future desktop app use
-  the same database and schema.
+- The shared storage package exists so Lumenu interfaces use the same database
+  and schema.
 - The default database path should be an OS app data location, with an
   environment variable override for development and tests.
 - The storage package should run migrations automatically during app startup.
