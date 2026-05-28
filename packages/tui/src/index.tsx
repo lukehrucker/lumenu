@@ -65,12 +65,10 @@ function App() {
       help={
         <HelpBar
           shortcuts={[
-            'j/k move card',
-            'tab focus control',
-            'h/l adjust focus',
-            'r refresh',
-            'i identify',
-            'a add',
+            'left/right light',
+            'j/k row',
+            'h/l disabled',
+            'r/i/d preview only',
             'q quit',
           ]}
         />

@@ -1,38 +1,32 @@
 import * as React from 'react'
 import { TextAttributes } from '@opentui/core'
-import { useKeyboard, useRenderer } from '@opentui/react'
+import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/react'
 import { Effect } from 'effect'
 
 import { Temperature } from '@lumenu/keylight'
 import type { DeviceRow } from '@lumenu/storage'
+
+import { BrightnessSlider, TemperatureSlider } from './sliders.js'
 
 interface DashboardScreenProps {
   devices: DeviceRow[]
   onAddDevice: () => void
 }
 
-type CardControl =
-  | 'power'
-  | 'brightness'
-  | 'temperature'
-  | 'refresh'
-  | 'details'
+type DashboardRow = 'power' | 'brightness' | 'temperature'
 
-const controls: CardControl[] = [
-  'power',
-  'brightness',
-  'temperature',
-  'refresh',
-  'details',
-]
+const rows: DashboardRow[] = ['power', 'brightness', 'temperature']
 
-const controlLabels: Record<CardControl, string> = {
+const rowLabels: Record<DashboardRow | 'status', string> = {
   power: 'Power',
   brightness: 'Bright',
   temperature: 'Temp',
-  refresh: 'Refresh',
-  details: 'Details',
+  status: 'Status',
 }
+
+const minColumnWidth = 24
+const labelColumnWidth = 14
+const columnGapWidth = 4
 
 function formatValue(value: number | string | null, fallback = 'unknown') {
   return value === null ? fallback : String(value)
@@ -40,26 +34,18 @@ function formatValue(value: number | string | null, fallback = 'unknown') {
 
 function formatPower(value: number | null) {
   if (value === 1) {
-    return 'on'
+    return 'ON'
   }
 
   if (value === 0) {
-    return 'off'
+    return 'OFF'
   }
 
-  return 'unknown'
+  return '?'
 }
 
 function runtimeStatus(device: DeviceRow) {
   return device.lastSeenAt ? 'online' : 'offline'
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
-function formatTemperature(value: number | null) {
-  return value === null ? 'unknown' : `${value}K`
 }
 
 function lastTemperatureKelvin(device: DeviceRow) {
@@ -72,46 +58,108 @@ function lastTemperatureKelvin(device: DeviceRow) {
       )
 }
 
-function bar(value: number | null, min: number, max: number, width = 12) {
-  if (value === null) {
-    return `[${'-'.repeat(width)}]`
-  }
-
-  const percent = (clamp(value, min, max) - min) / (max - min)
-  const filled = clamp(Math.round(percent * width), 0, width)
-
-  return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}]`
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
-function describeControl(control: CardControl, device: DeviceRow) {
-  if (control === 'power') {
-    return `${controlLabels[control]} ${formatPower(device.lastOn)}`
-  }
-
-  if (control === 'brightness') {
-    return `${controlLabels[control]} ${formatValue(device.lastBrightness)}`
-  }
-
-  if (control === 'temperature') {
-    return `${controlLabels[control]} ${formatTemperature(lastTemperatureKelvin(device))}`
-  }
-
-  return controlLabels[control]
+function sliceLabel(value: string, width: number) {
+  return value.length > width ? value.slice(0, Math.max(0, width - 1)) : value
 }
 
-export function DashboardScreen({
-  devices,
-  onAddDevice,
-}: DashboardScreenProps) {
+function deviceName(device: DeviceRow | undefined) {
+  if (!device) {
+    return null
+  }
+
+  const displayName = device.displayName.trim()
+  const productName = device.productName?.trim()
+
+  if (displayName.length > 0) {
+    return displayName
+  }
+
+  if (productName && device.serialNumber.length >= 4) {
+    return `${productName} ${device.serialNumber.slice(-4)}`
+  }
+
+  if (productName) {
+    return productName
+  }
+
+  return device.serialNumber || device.host
+}
+
+function columnWidth(devices: DeviceRow[], terminalWidth: number) {
+  const usableWidth = Math.max(0, terminalWidth - labelColumnWidth - 10)
+  const widestName = devices.reduce((width, device) => {
+    return Math.max(width, (deviceName(device) ?? 'Unknown').length)
+  }, 0)
+
+  return clamp(
+    widestName + columnGapWidth,
+    minColumnWidth,
+    Math.max(minColumnWidth, usableWidth)
+  )
+}
+
+function visibleRange(
+  selectedIndex: number,
+  deviceCount: number,
+  terminalWidth: number,
+  columnWidth: number
+) {
+  const usableWidth = Math.max(0, terminalWidth - labelColumnWidth - 10)
+  const visibleCount = clamp(
+    Math.floor(usableWidth / columnWidth),
+    1,
+    Math.max(1, deviceCount)
+  )
+  const start = clamp(
+    selectedIndex - visibleCount + 1,
+    0,
+    Math.max(0, deviceCount - visibleCount)
+  )
+
+  return {
+    start,
+    end: Math.min(deviceCount, start + visibleCount),
+    visibleCount,
+  }
+}
+
+function rowName(row: DashboardRow) {
+  if (row === 'brightness') {
+    return 'Brightness'
+  }
+
+  if (row === 'temperature') {
+    return 'Temperature'
+  }
+
+  return 'Power'
+}
+
+export function DashboardScreen({ devices }: DashboardScreenProps) {
   const renderer = useRenderer()
-  const [selectedIndex, setSelectedIndex] = React.useState(0)
-  const [focusedControlIndex, setFocusedControlIndex] = React.useState(0)
+  const { width } = useTerminalDimensions()
+  const [selectedDeviceIndex, setSelectedDeviceIndex] = React.useState(0)
+  const [selectedRowIndex, setSelectedRowIndex] = React.useState(1)
   const [status, setStatus] = React.useState('Cached state shown')
 
-  const selectedDevice = devices[selectedIndex] ?? devices[0]
+  const dashboardColumnWidth = columnWidth(devices, width)
+  const range = visibleRange(
+    selectedDeviceIndex,
+    devices.length,
+    width,
+    dashboardColumnWidth
+  )
+  const visibleDevices = devices.slice(range.start, range.end)
+  const selectedDevice = devices[selectedDeviceIndex] ?? devices[0]
+  const selectedRow = rows[selectedRowIndex] ?? 'brightness'
+  const narrow = width < 70
 
   React.useEffect(() => {
-    setSelectedIndex((index) =>
+    setSelectedDeviceIndex((index) =>
       Math.min(index, Math.max(0, devices.length - 1))
     )
   }, [devices.length])
@@ -122,120 +170,213 @@ export function DashboardScreen({
       return
     }
 
-    if (key.name === 'a') {
-      onAddDevice()
+    if (key.name === 'left' || key.name === 'H') {
+      setSelectedDeviceIndex((index) => Math.max(0, index - 1))
       return
     }
 
-    if (key.name === 'tab') {
-      setFocusedControlIndex((index) => (index + 1) % controls.length)
+    if (key.name === 'right' || key.name === 'L') {
+      setSelectedDeviceIndex((index) => Math.min(devices.length - 1, index + 1))
       return
     }
 
     if (key.name === 'up' || key.name === 'k') {
-      setSelectedIndex((index) => Math.max(0, index - 1))
+      setSelectedRowIndex((index) => Math.max(0, index - 1))
       return
     }
 
-    if (key.name === 'down' || key.name === 'j') {
-      setSelectedIndex((index) => Math.min(devices.length - 1, index + 1))
+    if (key.name === 'down' || key.name === 'j' || key.name === 'tab') {
+      setSelectedRowIndex((index) => Math.min(rows.length - 1, index + 1))
       return
     }
 
-    if (key.name === 'left' || key.name === 'h') {
-      setFocusedControlIndex((index) => Math.max(0, index - 1))
-      return
-    }
-
-    if (key.name === 'right' || key.name === 'l') {
-      setFocusedControlIndex((index) =>
-        Math.min(controls.length - 1, index + 1)
-      )
-      return
-    }
-
-    if (key.name === 'r') {
-      setStatus('Refresh controls are not wired yet')
-      return
-    }
-
-    if (key.name === 'i') {
-      setStatus('Identify controls are not wired yet')
-      return
-    }
-
-    if (key.name === 'return' || key.name === 'enter') {
-      const focusedControl = controls[focusedControlIndex] ?? 'details'
-      setStatus(`${controlLabels[focusedControl]} is not wired yet`)
+    if (
+      key.name === 'h' ||
+      key.name === 'l' ||
+      key.name === 'r' ||
+      key.name === 'i' ||
+      key.name === 'd' ||
+      key.name === 'return' ||
+      key.name === 'enter' ||
+      key.name === 'space'
+    ) {
+      setStatus('Read-only preview: commands are not implemented')
     }
   })
 
+  if (narrow) {
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <text attributes={TextAttributes.BOLD}>Lumenu Faders</text>
+        <text attributes={TextAttributes.DIM}>{status}</text>
+
+        <scrollbox flexGrow={1} marginTop={1}>
+          <box flexDirection="column">
+            {devices.map((device, index) => {
+              const selected = index === selectedDeviceIndex
+              const online = runtimeStatus(device) === 'online'
+              const temperature = lastTemperatureKelvin(device)
+
+              return (
+                <box
+                  key={device.serialNumber}
+                  flexDirection="column"
+                  marginBottom={1}
+                >
+                  <text
+                    attributes={
+                      selected ? TextAttributes.BOLD : TextAttributes.DIM
+                    }
+                  >
+                    {selected ? '>' : ' '} {deviceName(device)}{' '}
+                    {runtimeStatus(device)} {formatPower(device.lastOn)}
+                  </text>
+                  <box flexDirection="row">
+                    <text
+                      width={8}
+                      attributes={online ? undefined : TextAttributes.DIM}
+                    >
+                      {'  '}Bright
+                    </text>
+                    <BrightnessSlider
+                      value={device.lastBrightness}
+                      selected={selected && selectedRow === 'brightness'}
+                      disabled={!online}
+                    />
+                  </box>
+                  <box flexDirection="row">
+                    <text
+                      width={8}
+                      attributes={online ? undefined : TextAttributes.DIM}
+                    >
+                      {'  '}Temp
+                    </text>
+                    <TemperatureSlider
+                      value={temperature}
+                      selected={selected && selectedRow === 'temperature'}
+                      disabled={!online}
+                    />
+                  </box>
+                </box>
+              )
+            })}
+          </box>
+        </scrollbox>
+      </box>
+    )
+  }
+
   return (
     <box flexDirection="column" flexGrow={1}>
-      <text attributes={TextAttributes.BOLD}>Lumenu dashboard</text>
-      <text attributes={TextAttributes.DIM}>
-        {devices.length} saved {devices.length === 1 ? 'light' : 'lights'} |{' '}
-        {status}
-      </text>
+      <box flexDirection="row">
+        <text attributes={TextAttributes.BOLD} flexGrow={1}>
+          Lumenu Faders
+        </text>
+        <text attributes={TextAttributes.DIM}>
+          {devices.length > range.visibleCount
+            ? `Showing lights ${range.start + 1}-${range.end} of ${devices.length}`
+            : status}
+        </text>
+      </box>
 
-      <scrollbox flexGrow={1} marginTop={1}>
-        <box flexDirection="column">
-          {devices.map((device) => {
-            const selected = device === selectedDevice
-            const online = runtimeStatus(device) === 'online'
-            const temperature = lastTemperatureKelvin(device)
+      <box flexDirection="column" marginTop={1}>
+        <box borderStyle="single" flexDirection="column" padding={2}>
+          <box flexDirection="row" marginBottom={1}>
+            <text width={labelColumnWidth}> </text>
+            {visibleDevices.map((device) => {
+              const selected = device === selectedDevice
 
-            return (
-              <box
-                key={device.serialNumber}
-                borderStyle={selected ? 'double' : 'single'}
-                flexDirection="column"
-                marginBottom={1}
-                padding={1}
-              >
+              return (
                 <text
+                  key={device.serialNumber}
+                  width={dashboardColumnWidth}
                   attributes={
                     selected ? TextAttributes.BOLD : TextAttributes.DIM
                   }
                 >
-                  {selected ? '>' : ' '} {device.displayName} |{' '}
-                  {runtimeStatus(device)} | {formatPower(device.lastOn)}
+                  {sliceLabel(
+                    deviceName(device) ?? 'Unknown',
+                    dashboardColumnWidth - columnGapWidth
+                  )}
                 </text>
+              )
+            })}
+          </box>
 
-                <text attributes={online ? undefined : TextAttributes.DIM}>
-                  Bright {bar(device.lastBrightness, 0, 100)}{' '}
-                  {formatValue(device.lastBrightness)}% | Temp{' '}
-                  {bar(temperature, 2900, 7000)}{' '}
-                  {formatTemperature(temperature)}
+          <box flexDirection="row" marginBottom={1}>
+            <text width={labelColumnWidth}>{rowLabels.power}</text>
+            {visibleDevices.map((device) => {
+              const selected =
+                device === selectedDevice && selectedRow === 'power'
+
+              return (
+                <text
+                  key={device.serialNumber}
+                  width={dashboardColumnWidth}
+                  attributes={selected ? TextAttributes.BOLD : undefined}
+                >
+                  {selected
+                    ? `<${formatPower(device.lastOn)}>`
+                    : formatPower(device.lastOn)}
                 </text>
+              )
+            })}
+          </box>
 
-                <text attributes={online ? undefined : TextAttributes.DIM}>
-                  {controls
-                    .map((control, controlIndex) => {
-                      const focused =
-                        selected && focusedControlIndex === controlIndex
-                      const disabled =
-                        !online &&
-                        (control === 'power' ||
-                          control === 'brightness' ||
-                          control === 'temperature')
-                      const label = describeControl(control, device)
-                      const framed = focused ? `<${label}>` : `[${label}]`
+          <box flexDirection="row" marginBottom={1}>
+            <text width={labelColumnWidth}>{rowLabels.brightness}</text>
+            {visibleDevices.map((device) => {
+              const selected =
+                device === selectedDevice && selectedRow === 'brightness'
+              const online = runtimeStatus(device) === 'online'
 
-                      return disabled ? `${framed} disabled` : framed
-                    })
-                    .join('  ')}
-                </text>
+              return (
+                <box key={device.serialNumber} width={dashboardColumnWidth}>
+                  <BrightnessSlider
+                    value={device.lastBrightness}
+                    selected={selected}
+                    disabled={!online}
+                  />
+                </box>
+              )
+            })}
+          </box>
 
-                <text attributes={TextAttributes.DIM}>
-                  Host {device.host} | Serial {device.serialNumber} | Last seen{' '}
-                  {formatValue(device.lastSeenAt, 'never')}
-                </text>
-              </box>
-            )
-          })}
+          <box flexDirection="row" marginBottom={1}>
+            <text width={labelColumnWidth}>{rowLabels.temperature}</text>
+            {visibleDevices.map((device) => {
+              const selected =
+                device === selectedDevice && selectedRow === 'temperature'
+              const online = runtimeStatus(device) === 'online'
+
+              return (
+                <box key={device.serialNumber} width={dashboardColumnWidth}>
+                  <TemperatureSlider
+                    value={lastTemperatureKelvin(device)}
+                    selected={selected}
+                    disabled={!online}
+                  />
+                </box>
+              )
+            })}
+          </box>
+
+          <box flexDirection="row">
+            <text width={labelColumnWidth}>{rowLabels.status}</text>
+            {visibleDevices.map((device) => (
+              <text key={device.serialNumber} width={dashboardColumnWidth}>
+                {runtimeStatus(device)}
+              </text>
+            ))}
+          </box>
         </box>
-      </scrollbox>
+      </box>
+
+      <text marginTop={1} attributes={TextAttributes.DIM}>
+        Selected: {formatValue(deviceName(selectedDevice))} /{' '}
+        {rowName(selectedRow)}
+      </text>
+      <text attributes={TextAttributes.DIM}>{status}</text>
     </box>
   )
 }

@@ -85,6 +85,12 @@ function temperatureColor(value: number | null) {
   return '#60a5fa'
 }
 
+const valueWidth = 8
+
+function paddedValue(value: string) {
+  return value.padEnd(valueWidth, ' ')
+}
+
 export function SmoothSlider({
   value,
   min,
@@ -100,14 +106,19 @@ export function SmoothSlider({
   const segments = sliderSegments(disabled ? null : value, min, max, width)
   const color = disabled ? '#71717a' : activeColor
   const railAttributes = selected ? TextAttributes.BOLD : TextAttributes.DIM
+  const railColor = selected ? color : trackColor
 
   return (
     <text attributes={disabled ? TextAttributes.DIM : undefined}>
-      {selected ? <span attributes={railAttributes}>▐</span> : null}
+      <span fg={railColor} attributes={railAttributes}>
+        ▐
+      </span>
       <span fg={color}>{segments.filled}</span>
       <span fg={color}>{segments.partial}</span>
       <span fg={trackColor}>{segments.empty}</span>
-      {selected ? <span attributes={railAttributes}>▌</span> : null}
+      <span fg={railColor} attributes={railAttributes}>
+        ▌
+      </span>
       {updating ? <span fg="#a1a1aa">*</span> : null}
       {error ? <span fg="#f87171">!</span> : null}
     </text>
@@ -118,12 +129,10 @@ export function BrightnessSlider(props: ValueSliderProps) {
   return (
     <box flexDirection="row">
       <text
-        width={5}
+        width={valueWidth}
         attributes={props.selected ? TextAttributes.BOLD : undefined}
       >
-        {props.selected
-          ? `<${formatBrightness(props.value)}>`
-          : formatBrightness(props.value)}
+        {paddedValue(formatBrightness(props.value))}
       </text>
       <SmoothSlider {...props} min={0} max={100} activeColor="#facc15" />
     </box>
@@ -134,12 +143,10 @@ export function TemperatureSlider(props: ValueSliderProps) {
   return (
     <box flexDirection="row">
       <text
-        width={7}
+        width={valueWidth}
         attributes={props.selected ? TextAttributes.BOLD : undefined}
       >
-        {props.selected
-          ? `<${formatTemperature(props.value)}>`
-          : formatTemperature(props.value)}
+        {paddedValue(formatTemperature(props.value))}
       </text>
       <SmoothSlider
         {...props}
