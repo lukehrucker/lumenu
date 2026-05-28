@@ -1,5 +1,4 @@
-import bonjour = require('bonjour')
-import type { RemoteService } from 'bonjour'
+import Bonjour from 'bonjour-service'
 import { Data, Effect } from 'effect'
 
 import { getReachableIPv4Addresses } from './utils.js'
@@ -62,7 +61,7 @@ export namespace mDNS {
   }: ValidatedDiscoveryOptions): Effect.Effect<string[], DiscoveryError> =>
     Effect.async<string[], DiscoveryError>((resume) => {
       try {
-        const bonjourInstance = bonjour()
+        const bonjourInstance = new Bonjour()
         const browser = bonjourInstance.find({ type: serviceType })
         const discoveredIPs = new Set<string>()
 
@@ -90,7 +89,7 @@ export namespace mDNS {
           resume(effect)
         }
 
-        browser.on('up', (service: RemoteService) => {
+        browser.on('up', (service) => {
           for (const address of getReachableIPv4Addresses(service)) {
             discoveredIPs.add(address)
           }
