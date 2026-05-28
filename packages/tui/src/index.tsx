@@ -67,7 +67,7 @@ function App() {
           shortcuts={[
             'left/right light',
             'j/k row',
-            'h/l disabled',
+            'h/l adjust',
             'r/i/d preview only',
             'q quit',
           ]}

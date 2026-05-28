@@ -7,7 +7,11 @@ import { Temperature } from '@lumenu/keylight'
 import type { DeviceRow } from '@lumenu/storage'
 
 import { BrightnessSlider, TemperatureSlider } from './sliders.js'
-import { usePowerMutation } from '../core/power-mutation.js'
+import {
+  useBrightnessMutation,
+  usePowerMutation,
+  useTemperatureMutation,
+} from '../core/power-mutation.js'
 
 interface DashboardScreenProps {
   devices: DeviceRow[]
@@ -28,6 +32,8 @@ const rowLabels: Record<DashboardRow | 'status', string> = {
 const minColumnWidth = 24
 const labelColumnWidth = 14
 const columnGapWidth = 4
+const brightnessStep = 5
+const temperatureStep = 100
 
 function formatValue(value: number | string | null, fallback = 'unknown') {
   return value === null ? fallback : String(value)
@@ -146,6 +152,8 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
   const [selectedDeviceIndex, setSelectedDeviceIndex] = React.useState(0)
   const [selectedRowIndex, setSelectedRowIndex] = React.useState(1)
   const powerMutation = usePowerMutation()
+  const brightnessMutation = useBrightnessMutation()
+  const temperatureMutation = useTemperatureMutation()
 
   const dashboardColumnWidth = columnWidth(devices, width)
   const range = visibleRange(
@@ -203,6 +211,38 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
       return
     }
+
+    if (key.name === 'h' || key.name === 'l') {
+      if (!selectedDevice) {
+        return
+      }
+
+      const direction = key.name === 'h' ? -1 : 1
+
+      if (selectedRow === 'brightness' && !brightnessMutation.isPending) {
+        brightnessMutation.mutate({
+          device: selectedDevice,
+          value: clamp(
+            (selectedDevice.lastBrightness ?? 50) + direction * brightnessStep,
+            0,
+            100
+          ),
+        })
+        return
+      }
+
+      if (selectedRow === 'temperature' && !temperatureMutation.isPending) {
+        temperatureMutation.mutate({
+          device: selectedDevice,
+          value: clamp(
+            (lastTemperatureKelvin(selectedDevice) ?? 4000) +
+              direction * temperatureStep,
+            2900,
+            7000
+          ),
+        })
+      }
+    }
   })
 
   if (narrow) {
@@ -242,6 +282,11 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                       value={device.lastBrightness}
                       selected={selected && selectedRow === 'brightness'}
                       disabled={!online}
+                      updating={
+                        selected &&
+                        selectedRow === 'brightness' &&
+                        brightnessMutation.isPending
+                      }
                     />
                   </box>
                   <box flexDirection="row">
@@ -255,6 +300,11 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                       value={temperature}
                       selected={selected && selectedRow === 'temperature'}
                       disabled={!online}
+                      updating={
+                        selected &&
+                        selectedRow === 'temperature' &&
+                        temperatureMutation.isPending
+                      }
                     />
                   </box>
                 </box>
@@ -336,6 +386,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                     value={device.lastBrightness}
                     selected={selected}
                     disabled={!online}
+                    updating={selected && brightnessMutation.isPending}
                   />
                 </box>
               )
@@ -355,6 +406,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                     value={lastTemperatureKelvin(device)}
                     selected={selected}
                     disabled={!online}
+                    updating={selected && temperatureMutation.isPending}
                   />
                 </box>
               )
