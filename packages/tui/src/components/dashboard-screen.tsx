@@ -7,6 +7,7 @@ import { Temperature } from '@lumenu/keylight'
 import type { DeviceRow } from '@lumenu/storage'
 
 import { BrightnessSlider, TemperatureSlider } from './sliders.js'
+import { usePowerMutation } from '../core/power-mutation.js'
 
 interface DashboardScreenProps {
   devices: DeviceRow[]
@@ -144,7 +145,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
   const { width } = useTerminalDimensions()
   const [selectedDeviceIndex, setSelectedDeviceIndex] = React.useState(0)
   const [selectedRowIndex, setSelectedRowIndex] = React.useState(1)
-  const [status, setStatus] = React.useState('Cached state shown')
+  const powerMutation = usePowerMutation()
 
   const dashboardColumnWidth = columnWidth(devices, width)
   const range = visibleRange(
@@ -190,17 +191,17 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
       return
     }
 
-    if (
-      key.name === 'h' ||
-      key.name === 'l' ||
-      key.name === 'r' ||
-      key.name === 'i' ||
-      key.name === 'd' ||
-      key.name === 'return' ||
-      key.name === 'enter' ||
-      key.name === 'space'
-    ) {
-      setStatus('Read-only preview: commands are not implemented')
+    if (key.name === 'space' || key.name === 'return' || key.name === 'enter') {
+      if (
+        selectedRow === 'power' &&
+        selectedDevice &&
+        !powerMutation.isPending
+      ) {
+        powerMutation.mutate(selectedDevice)
+        return
+      }
+
+      return
     }
   })
 
@@ -208,7 +209,6 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
     return (
       <box flexDirection="column" flexGrow={1}>
         <text attributes={TextAttributes.BOLD}>Lumenu Faders</text>
-        <text attributes={TextAttributes.DIM}>{status}</text>
 
         <scrollbox flexGrow={1} marginTop={1}>
           <box flexDirection="column">
@@ -275,7 +275,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
         <text attributes={TextAttributes.DIM}>
           {devices.length > range.visibleCount
             ? `Showing lights ${range.start + 1}-${range.end} of ${devices.length}`
-            : status}
+            : 'Cached state shown'}
         </text>
       </box>
 
@@ -376,7 +376,6 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
         Selected: {formatValue(deviceName(selectedDevice))} /{' '}
         {rowName(selectedRow)}
       </text>
-      <text attributes={TextAttributes.DIM}>{status}</text>
     </box>
   )
 }
