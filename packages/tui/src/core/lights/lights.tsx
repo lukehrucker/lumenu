@@ -6,7 +6,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Effect } from 'effect'
 
 import { Keylight, Temperature } from '@lumenu/keylight'
-import type { Light, LightsStatus } from '@lumenu/keylight'
+import type { Light, LightsStatus, LightUpdate } from '@lumenu/keylight'
 import { Storage } from '@lumenu/storage'
 import type { DeviceRow, DeviceStateInput } from '@lumenu/storage'
 
@@ -24,26 +24,6 @@ export interface LightRecord {
   temperature: number | null
   lastSeenAt: string | null
 }
-
-interface SetPowerAction {
-  kind: 'setPower'
-  on: boolean
-}
-
-interface SetBrightnessAction {
-  kind: 'setBrightness'
-  brightness: number
-}
-
-interface SetTemperatureKelvinAction {
-  kind: 'setTemperatureKelvin'
-  kelvin: number
-}
-
-type LightMutationAction =
-  | SetPowerAction
-  | SetBrightnessAction
-  | SetTemperatureKelvinAction
 
 interface LightActionState {
   readonly isPending: boolean
@@ -141,70 +121,47 @@ const listLights = Storage.pipe(
   Effect.map((devices) => devices.map(deviceToLightRecord))
 )
 
-function lightMutationActionFromMetadata(
-  metadata: unknown
-): LightMutationAction | undefined {
-  if (
-    typeof metadata !== 'object' ||
-    metadata === null ||
-    !('kind' in metadata)
-  ) {
-    return undefined
+function lightUpdateFromMutation(
+  original: LightRecord,
+  modified: LightRecord
+): LightUpdate {
+  const update: LightUpdate = {}
+
+  if (modified.on !== null && modified.on !== original.on) {
+    update.on = modified.on
   }
 
   if (
-    metadata.kind === 'setPower' &&
-    'on' in metadata &&
-    typeof metadata.on === 'boolean'
+    modified.brightness !== null &&
+    modified.brightness !== original.brightness
   ) {
-    return { kind: 'setPower', on: metadata.on }
+    update.brightness = modified.brightness
   }
 
   if (
-    metadata.kind === 'setBrightness' &&
-    'brightness' in metadata &&
-    typeof metadata.brightness === 'number'
+    modified.temperature !== null &&
+    modified.temperature !== original.temperature
   ) {
-    return {
-      kind: 'setBrightness',
-      brightness: metadata.brightness,
-    }
+    update.temperature = modified.temperature
   }
 
-  if (
-    metadata.kind === 'setTemperatureKelvin' &&
-    'kelvin' in metadata &&
-    typeof metadata.kelvin === 'number'
-  ) {
-    return {
-      kind: 'setTemperatureKelvin',
-      kelvin: metadata.kelvin,
-    }
-  }
-
-  return undefined
+  return update
 }
 
-function executeLightAction(keylight: Keylight, action: LightMutationAction) {
-  switch (action.kind) {
-    case 'setPower':
-      return action.on ? keylight.turnOn() : keylight.turnOff()
-    case 'setBrightness':
-      return keylight.setBrightness(action.brightness)
-    case 'setTemperatureKelvin':
-      return keylight.setTemperatureKelvin(action.kelvin)
-  }
-}
-
-function persistLightAction(light: LightRecord, action: LightMutationAction) {
+function persistLightUpdate(original: LightRecord, modified: LightRecord) {
   return Effect.gen(function* () {
-    const keylight = Keylight.make(light.host)
-    const status = yield* executeLightAction(keylight, action)
+    const update = lightUpdateFromMutation(original, modified)
+
+    if (Object.keys(update).length === 0) {
+      return
+    }
+
+    const status = yield* Keylight.make(original.host).setLight(update)
 
     yield* Storage.pipe(
       Effect.flatMap((storage) =>
         storage.updateDeviceState(
-          light.serialNumber,
+          original.serialNumber,
           lightStatusToDeviceState(status)
         )
       )
@@ -230,14 +187,8 @@ function createLightsCollection({
         left.displayName.localeCompare(right.displayName),
       onUpdate: async (params: UpdateMutationFnParams<LightRecord>) => {
         for (const mutation of params.transaction.mutations) {
-          const action = lightMutationActionFromMetadata(mutation.metadata)
-
-          if (!action) {
-            continue
-          }
-
           await runtime.runPromise(
-            persistLightAction(mutation.original, action)
+            persistLightUpdate(mutation.original, mutation.modified)
           )
         }
       },
@@ -342,13 +293,9 @@ export function useToggleLightPower() {
       }
 
       const on = light.on !== true
-      const transaction = collection.update(
-        serialNumber,
-        { metadata: { kind: 'setPower', on } },
-        (draft) => {
-          draft.on = on
-        }
-      )
+      const transaction = collection.update(serialNumber, (draft) => {
+        draft.on = on
+      })
 
       action.track(serialNumber, transaction.isPersisted.promise)
     },
@@ -372,13 +319,9 @@ export function useSetLightBrightness() {
         return
       }
 
-      const transaction = collection.update(
-        serialNumber,
-        { metadata: { kind: 'setBrightness', brightness } },
-        (draft) => {
-          draft.brightness = brightness
-        }
-      )
+      const transaction = collection.update(serialNumber, (draft) => {
+        draft.brightness = brightness
+      })
 
       action.track(serialNumber, transaction.isPersisted.promise)
     },
@@ -403,13 +346,14 @@ export function useSetLightTemperatureKelvin() {
       }
 
       const apiTemperature = kelvinToApiTemperature(kelvin)
-      const transaction = collection.update(
-        serialNumber,
-        { metadata: { kind: 'setTemperatureKelvin', kelvin } },
-        (draft) => {
-          draft.temperature = apiTemperature ?? draft.temperature
-        }
-      )
+
+      if (apiTemperature === null) {
+        return
+      }
+
+      const transaction = collection.update(serialNumber, (draft) => {
+        draft.temperature = apiTemperature
+      })
 
       action.track(serialNumber, transaction.isPersisted.promise)
     },
