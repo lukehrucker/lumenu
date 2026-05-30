@@ -5,7 +5,7 @@ import { Storage } from '@lumenu/storage'
 
 type LumenuRequirements = Storage
 
-interface LumenuRuntime {
+export interface LumenuRuntime {
   readonly runPromise: <A, E>(
     effect: Effect.Effect<A, E, LumenuRequirements>
   ) => Promise<A>

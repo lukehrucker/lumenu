@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useKeyboard, useRenderer } from '@opentui/react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { Effect } from 'effect'
 
 import { StatusBadge } from './status-badge.js'
@@ -10,7 +10,8 @@ import {
   identifyHost,
   probeHost,
   saveDiscoveredDevices,
-} from '../core/discovery.js'
+  useLightsCollection,
+} from '../core/lights/index.js'
 import { useLumenuRuntime } from '../core/lumenu-runtime.js'
 import { mDNS } from '@lumenu/mdns'
 
@@ -21,7 +22,7 @@ interface OnboardingScreenProps {
 export function OnboardingScreen({ onSaved }: OnboardingScreenProps) {
   const runtime = useLumenuRuntime()
   const renderer = useRenderer()
-  const queryClient = useQueryClient()
+  const lightsCollection = useLightsCollection()
   const [devices, setDevices] = React.useState<DiscoveredDevice[]>([])
   const [selectedIndex, setSelectedIndex] = React.useState(0)
   const [message, setMessage] = React.useState('Press r to scan for lights.')
@@ -84,7 +85,7 @@ export function OnboardingScreen({ onSaved }: OnboardingScreenProps) {
   const saveMutation = useMutation({
     mutationFn: () => runtime.runPromise(saveDiscoveredDevices(devices)),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['devices'] })
+      await lightsCollection.utils.refetch({ throwOnError: true })
       onSaved()
     },
     onError: (error) => setMessage(`Save failed: ${String(error)}`),

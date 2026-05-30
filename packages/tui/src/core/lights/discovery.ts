@@ -5,6 +5,8 @@ import { Keylight } from '@lumenu/keylight'
 import type { DeviceInput } from '@lumenu/storage'
 import { Storage } from '@lumenu/storage'
 
+import { discoveredLightToDeviceState } from './lights.js'
+
 export type DiscoveryStatus =
   | 'discovered'
   | 'probing'
@@ -19,14 +21,6 @@ export interface DiscoveredDevice {
   info?: AccessoryInfo
   light?: Light
   error?: string
-}
-
-function powerToStorage(on: boolean | undefined): 0 | 1 | undefined {
-  if (on === undefined) {
-    return undefined
-  }
-
-  return on ? 1 : 0
 }
 
 export function probeHost(host: string) {
@@ -67,10 +61,7 @@ export function saveDiscoveredDevices(devices: DiscoveredDevice[]) {
         productName: device.info.productName,
         firmwareVersion: device.info.firmwareVersion,
         firmwareBuildNumber: device.info.firmwareBuildNumber,
-        lastOn: powerToStorage(device.light?.on),
-        lastBrightness: device.light?.brightness,
-        lastTemperature: device.light?.temperature,
-        lastSeenAt: new Date().toISOString(),
+        ...discoveredLightToDeviceState(device.light),
       },
     ]
   })

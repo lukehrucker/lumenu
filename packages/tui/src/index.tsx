@@ -9,7 +9,7 @@ import { AppShell } from './components/app-shell.js'
 import { DashboardScreen } from './components/dashboard-screen.js'
 import { HelpBar } from './components/help-bar.js'
 import { OnboardingScreen } from './components/onboarding-screen.js'
-import { useDevicesQuery } from './core/devices.js'
+import { LightsProvider, useLights } from './core/lights/index.js'
 import {
   lumenuLayer,
   LumenuRuntimeProvider,
@@ -20,26 +20,26 @@ import { TuiRenderer, tuiRendererLayer } from './core/tui-renderer.js'
 const queryClient = new QueryClient()
 
 function App() {
-  const devices = useDevicesQuery()
+  const lights = useLights()
   const [route, setRoute] = React.useState<'onboarding' | 'dashboard'>(
     'dashboard'
   )
 
-  if (devices.isPending) {
+  if (lights.isLoading) {
     return <CenteredMessage title="Lumenu" message="Loading saved lights..." />
   }
 
-  if (devices.isError) {
+  if (lights.isError) {
     return (
       <CenteredMessage
         title="Storage Error"
-        message={String(devices.error)}
+        message="Failed to load saved lights."
         dim={false}
       />
     )
   }
 
-  if (devices.data.length === 0 || route === 'onboarding') {
+  if (lights.data.length === 0 || route === 'onboarding') {
     return (
       <AppShell
         help={
@@ -75,7 +75,7 @@ function App() {
       }
     >
       <DashboardScreen
-        devices={devices.data}
+        lights={lights.data}
         onAddDevice={() => setRoute('onboarding')}
       />
     </AppShell>
@@ -89,7 +89,9 @@ function renderApp(runtime: LumenuManagedRuntime) {
         createRoot(renderer).render(
           <LumenuRuntimeProvider runtime={runtime}>
             <QueryClientProvider client={queryClient}>
-              <App />
+              <LightsProvider>
+                <App />
+              </LightsProvider>
             </QueryClientProvider>
           </LumenuRuntimeProvider>
         )

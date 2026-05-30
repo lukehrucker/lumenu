@@ -1,20 +1,18 @@
 import * as React from 'react'
 import { TextAttributes } from '@opentui/core'
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/react'
-import { Effect } from 'effect'
-
-import { Temperature } from '@lumenu/keylight'
-import type { DeviceRow } from '@lumenu/storage'
 
 import { BrightnessSlider, TemperatureSlider } from './sliders.js'
 import {
-  useBrightnessMutation,
-  usePowerMutation,
-  useTemperatureMutation,
-} from '../core/power-mutation.js'
+  lastTemperatureKelvin,
+  type LightRecord,
+  useSetLightBrightness,
+  useSetLightTemperatureKelvin,
+  useToggleLightPower,
+} from '../core/lights/index.js'
 
 interface DashboardScreenProps {
-  devices: DeviceRow[]
+  lights: LightRecord[]
   onAddDevice: () => void
 }
 
@@ -39,30 +37,20 @@ function formatValue(value: number | string | null, fallback = 'unknown') {
   return value === null ? fallback : String(value)
 }
 
-function formatPower(value: number | null) {
-  if (value === 1) {
+function formatPower(value: boolean | null) {
+  if (value === true) {
     return 'ON'
   }
 
-  if (value === 0) {
+  if (value === false) {
     return 'OFF'
   }
 
   return '?'
 }
 
-function runtimeStatus(device: DeviceRow) {
-  return device.lastSeenAt ? 'online' : 'offline'
-}
-
-function lastTemperatureKelvin(device: DeviceRow) {
-  return device.lastTemperature === null
-    ? null
-    : Effect.runSync(
-        Temperature.apiToKelvin(device.lastTemperature).pipe(
-          Effect.catchAll(() => Effect.succeed(null))
-        )
-      )
+function runtimeStatus(light: LightRecord) {
+  return light.lastSeenAt ? 'online' : 'offline'
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -73,33 +61,33 @@ function sliceLabel(value: string, width: number) {
   return value.length > width ? value.slice(0, Math.max(0, width - 1)) : value
 }
 
-function deviceName(device: DeviceRow | undefined) {
-  if (!device) {
+function lightName(light: LightRecord | undefined) {
+  if (!light) {
     return null
   }
 
-  const displayName = device.displayName.trim()
-  const productName = device.productName?.trim()
+  const displayName = light.displayName.trim()
+  const productName = light.productName?.trim()
 
   if (displayName.length > 0) {
     return displayName
   }
 
-  if (productName && device.serialNumber.length >= 4) {
-    return `${productName} ${device.serialNumber.slice(-4)}`
+  if (productName && light.serialNumber.length >= 4) {
+    return `${productName} ${light.serialNumber.slice(-4)}`
   }
 
   if (productName) {
     return productName
   }
 
-  return device.serialNumber || device.host
+  return light.serialNumber || light.host
 }
 
-function columnWidth(devices: DeviceRow[], terminalWidth: number) {
+function columnWidth(lights: LightRecord[], terminalWidth: number) {
   const usableWidth = Math.max(0, terminalWidth - labelColumnWidth - 10)
-  const widestName = devices.reduce((width, device) => {
-    return Math.max(width, (deviceName(device) ?? 'Unknown').length)
+  const widestName = lights.reduce((width, light) => {
+    return Math.max(width, (lightName(light) ?? 'Unknown').length)
   }, 0)
 
   return clamp(
@@ -146,32 +134,32 @@ function rowName(row: DashboardRow) {
   return 'Power'
 }
 
-export function DashboardScreen({ devices }: DashboardScreenProps) {
+export function DashboardScreen({ lights }: DashboardScreenProps) {
   const renderer = useRenderer()
   const { width } = useTerminalDimensions()
   const [selectedDeviceIndex, setSelectedDeviceIndex] = React.useState(0)
   const [selectedRowIndex, setSelectedRowIndex] = React.useState(1)
-  const powerMutation = usePowerMutation()
-  const brightnessMutation = useBrightnessMutation()
-  const temperatureMutation = useTemperatureMutation()
+  const powerMutation = useToggleLightPower()
+  const brightnessMutation = useSetLightBrightness()
+  const temperatureMutation = useSetLightTemperatureKelvin()
 
-  const dashboardColumnWidth = columnWidth(devices, width)
+  const dashboardColumnWidth = columnWidth(lights, width)
   const range = visibleRange(
     selectedDeviceIndex,
-    devices.length,
+    lights.length,
     width,
     dashboardColumnWidth
   )
-  const visibleDevices = devices.slice(range.start, range.end)
-  const selectedDevice = devices[selectedDeviceIndex] ?? devices[0]
+  const visibleLights = lights.slice(range.start, range.end)
+  const selectedLight = lights[selectedDeviceIndex] ?? lights[0]
   const selectedRow = rows[selectedRowIndex] ?? 'brightness'
   const narrow = width < 70
 
   React.useEffect(() => {
     setSelectedDeviceIndex((index) =>
-      Math.min(index, Math.max(0, devices.length - 1))
+      Math.min(index, Math.max(0, lights.length - 1))
     )
-  }, [devices.length])
+  }, [lights.length])
 
   useKeyboard((key) => {
     if (key.name === 'q') {
@@ -185,7 +173,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
     }
 
     if (key.name === 'right' || key.name === 'L') {
-      setSelectedDeviceIndex((index) => Math.min(devices.length - 1, index + 1))
+      setSelectedDeviceIndex((index) => Math.min(lights.length - 1, index + 1))
       return
     }
 
@@ -202,10 +190,10 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
     if (key.name === 'space' || key.name === 'return' || key.name === 'enter') {
       if (
         selectedRow === 'power' &&
-        selectedDevice &&
+        selectedLight &&
         !powerMutation.isPending
       ) {
-        powerMutation.mutate(selectedDevice)
+        powerMutation.mutate(selectedLight.serialNumber)
         return
       }
 
@@ -213,7 +201,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
     }
 
     if (key.name === 'h' || key.name === 'l') {
-      if (!selectedDevice) {
+      if (!selectedLight) {
         return
       }
 
@@ -221,9 +209,9 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
       if (selectedRow === 'brightness' && !brightnessMutation.isPending) {
         brightnessMutation.mutate({
-          device: selectedDevice,
-          value: clamp(
-            (selectedDevice.lastBrightness ?? 50) + direction * brightnessStep,
+          serialNumber: selectedLight.serialNumber,
+          brightness: clamp(
+            (selectedLight.brightness ?? 50) + direction * brightnessStep,
             0,
             100
           ),
@@ -233,9 +221,9 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
       if (selectedRow === 'temperature' && !temperatureMutation.isPending) {
         temperatureMutation.mutate({
-          device: selectedDevice,
-          value: clamp(
-            (lastTemperatureKelvin(selectedDevice) ?? 4000) +
+          serialNumber: selectedLight.serialNumber,
+          kelvin: clamp(
+            (lastTemperatureKelvin(selectedLight.temperature) ?? 4000) +
               direction * temperatureStep,
             2900,
             7000
@@ -252,14 +240,14 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
         <scrollbox flexGrow={1} marginTop={1}>
           <box flexDirection="column">
-            {devices.map((device, index) => {
+            {lights.map((light, index) => {
               const selected = index === selectedDeviceIndex
-              const online = runtimeStatus(device) === 'online'
-              const temperature = lastTemperatureKelvin(device)
+              const online = runtimeStatus(light) === 'online'
+              const temperature = lastTemperatureKelvin(light.temperature)
 
               return (
                 <box
-                  key={device.serialNumber}
+                  key={light.serialNumber}
                   flexDirection="column"
                   marginBottom={1}
                 >
@@ -268,8 +256,8 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                       selected ? TextAttributes.BOLD : TextAttributes.DIM
                     }
                   >
-                    {selected ? '>' : ' '} {deviceName(device)}{' '}
-                    {runtimeStatus(device)} {formatPower(device.lastOn)}
+                    {selected ? '>' : ' '} {lightName(light)}{' '}
+                    {runtimeStatus(light)} {formatPower(light.on)}
                   </text>
                   <box flexDirection="row">
                     <text
@@ -279,13 +267,15 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                       {'  '}Bright
                     </text>
                     <BrightnessSlider
-                      value={device.lastBrightness}
+                      value={light.brightness}
                       selected={selected && selectedRow === 'brightness'}
                       disabled={!online}
                       updating={
                         selected &&
                         selectedRow === 'brightness' &&
-                        brightnessMutation.isPending
+                        brightnessMutation.isPending &&
+                        brightnessMutation.pendingSerialNumber ===
+                          light.serialNumber
                       }
                     />
                   </box>
@@ -303,7 +293,9 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
                       updating={
                         selected &&
                         selectedRow === 'temperature' &&
-                        temperatureMutation.isPending
+                        temperatureMutation.isPending &&
+                        temperatureMutation.pendingSerialNumber ===
+                          light.serialNumber
                       }
                     />
                   </box>
@@ -323,8 +315,8 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
           Lumenu Faders
         </text>
         <text attributes={TextAttributes.DIM}>
-          {devices.length > range.visibleCount
-            ? `Showing lights ${range.start + 1}-${range.end} of ${devices.length}`
+          {lights.length > range.visibleCount
+            ? `Showing lights ${range.start + 1}-${range.end} of ${lights.length}`
             : 'Cached state shown'}
         </text>
       </box>
@@ -333,19 +325,19 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
         <box borderStyle="single" flexDirection="column" padding={2}>
           <box flexDirection="row" marginBottom={1}>
             <text width={labelColumnWidth}> </text>
-            {visibleDevices.map((device) => {
-              const selected = device === selectedDevice
+            {visibleLights.map((light) => {
+              const selected = light === selectedLight
 
               return (
                 <text
-                  key={device.serialNumber}
+                  key={light.serialNumber}
                   width={dashboardColumnWidth}
                   attributes={
                     selected ? TextAttributes.BOLD : TextAttributes.DIM
                   }
                 >
                   {sliceLabel(
-                    deviceName(device) ?? 'Unknown',
+                    lightName(light) ?? 'Unknown',
                     dashboardColumnWidth - columnGapWidth
                   )}
                 </text>
@@ -355,19 +347,19 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
           <box flexDirection="row" marginBottom={1}>
             <text width={labelColumnWidth}>{rowLabels.power}</text>
-            {visibleDevices.map((device) => {
+            {visibleLights.map((light) => {
               const selected =
-                device === selectedDevice && selectedRow === 'power'
+                light === selectedLight && selectedRow === 'power'
 
               return (
                 <text
-                  key={device.serialNumber}
+                  key={light.serialNumber}
                   width={dashboardColumnWidth}
                   attributes={selected ? TextAttributes.BOLD : undefined}
                 >
                   {selected
-                    ? `<${formatPower(device.lastOn)}>`
-                    : formatPower(device.lastOn)}
+                    ? `<${formatPower(light.on)}>`
+                    : formatPower(light.on)}
                 </text>
               )
             })}
@@ -375,18 +367,23 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
           <box flexDirection="row" marginBottom={1}>
             <text width={labelColumnWidth}>{rowLabels.brightness}</text>
-            {visibleDevices.map((device) => {
+            {visibleLights.map((light) => {
               const selected =
-                device === selectedDevice && selectedRow === 'brightness'
-              const online = runtimeStatus(device) === 'online'
+                light === selectedLight && selectedRow === 'brightness'
+              const online = runtimeStatus(light) === 'online'
 
               return (
-                <box key={device.serialNumber} width={dashboardColumnWidth}>
+                <box key={light.serialNumber} width={dashboardColumnWidth}>
                   <BrightnessSlider
-                    value={device.lastBrightness}
+                    value={light.brightness}
                     selected={selected}
                     disabled={!online}
-                    updating={selected && brightnessMutation.isPending}
+                    updating={
+                      selected &&
+                      brightnessMutation.isPending &&
+                      brightnessMutation.pendingSerialNumber ===
+                        light.serialNumber
+                    }
                   />
                 </box>
               )
@@ -395,18 +392,23 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
           <box flexDirection="row" marginBottom={1}>
             <text width={labelColumnWidth}>{rowLabels.temperature}</text>
-            {visibleDevices.map((device) => {
+            {visibleLights.map((light) => {
               const selected =
-                device === selectedDevice && selectedRow === 'temperature'
-              const online = runtimeStatus(device) === 'online'
+                light === selectedLight && selectedRow === 'temperature'
+              const online = runtimeStatus(light) === 'online'
 
               return (
-                <box key={device.serialNumber} width={dashboardColumnWidth}>
+                <box key={light.serialNumber} width={dashboardColumnWidth}>
                   <TemperatureSlider
-                    value={lastTemperatureKelvin(device)}
+                    value={lastTemperatureKelvin(light.temperature)}
                     selected={selected}
                     disabled={!online}
-                    updating={selected && temperatureMutation.isPending}
+                    updating={
+                      selected &&
+                      temperatureMutation.isPending &&
+                      temperatureMutation.pendingSerialNumber ===
+                        light.serialNumber
+                    }
                   />
                 </box>
               )
@@ -415,9 +417,9 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
 
           <box flexDirection="row">
             <text width={labelColumnWidth}>{rowLabels.status}</text>
-            {visibleDevices.map((device) => (
-              <text key={device.serialNumber} width={dashboardColumnWidth}>
-                {runtimeStatus(device)}
+            {visibleLights.map((light) => (
+              <text key={light.serialNumber} width={dashboardColumnWidth}>
+                {runtimeStatus(light)}
               </text>
             ))}
           </box>
@@ -425,7 +427,7 @@ export function DashboardScreen({ devices }: DashboardScreenProps) {
       </box>
 
       <text marginTop={1} attributes={TextAttributes.DIM}>
-        Selected: {formatValue(deviceName(selectedDevice))} /{' '}
+        Selected: {formatValue(lightName(selectedLight))} /{' '}
         {rowName(selectedRow)}
       </text>
     </box>

@@ -1,6 +1,6 @@
 import { TextAttributes } from '@opentui/core'
 
-import type { DiscoveryStatus } from '../core/discovery.js'
+import type { DiscoveryStatus } from '../core/lights/index.js'
 
 const labels: Record<DiscoveryStatus, string> = {
   discovered: 'DISCOVERED',
